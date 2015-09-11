@@ -193,12 +193,12 @@ AC_ARG_ENABLE([eventfd],
 		[use eventfd for event signalling [default=auto]])],
 	[use_eventfd=$enableval], [use_eventfd='auto'])
 
-if test "x$use_eventfd" = "xyes" -a "x$eventfd_h" = "x0"; then
+if test "x$use_eventfd:$eventfd_h" = "xyes:0"; then
 	AC_MSG_ERROR([eventfd header not available; glibc 2.9+ required])
 fi
 
 AC_CHECK_DECL([EFD_NONBLOCK], [efd_hdr_ok=yes], [efd_hdr_ok=no], [#include <sys/eventfd.h>])
-if test "x$use_eventfd" = "xyes" -a "x$efd_hdr_ok" = "xno"; then
+if test "x$use_eventfd:$efd_hdr_ok" = "xyes:no"; then
 	AC_MSG_ERROR([eventfd header not usable; glibc 2.9+ required])
 fi
 
@@ -206,7 +206,7 @@ AC_MSG_CHECKING([whether to use eventfd for signalling])
 if test "x$use_eventfd" = "xno"; then
 	AC_MSG_RESULT([no (disabled by user)])
 else
-	if test "x$eventfd_h" = "x1" -a "x$efd_hdr_ok" = "xyes"; then
+	if test "x$eventfd_h:$efd_hdr_ok" = "x1:yes"; then
 		AC_MSG_RESULT([yes])
 		AC_DEFINE(USBI_USING_EVENTFD, 1, [eventfd available and enabled])
 	else
@@ -221,12 +221,12 @@ AC_ARG_ENABLE([timerfd],
 		[use timerfd for timing [default=auto]])],
 	[use_timerfd=$enableval], [use_timerfd='auto'])
 
-if test "x$use_timerfd" = "xyes" -a "x$timerfd_h" = "x0"; then
+if test "x$use_timerfd:$timerfd_h" = "xyes:0"; then
 	AC_MSG_ERROR([timerfd header not available; glibc 2.9+ required])
 fi
 
 AC_CHECK_DECL([TFD_NONBLOCK], [tfd_hdr_ok=yes], [tfd_hdr_ok=no], [#include <sys/timerfd.h>])
-if test "x$use_timerfd" = "xyes" -a "x$tfd_hdr_ok" = "xno"; then
+if test "x$use_timerfd:$tfd_hdr_ok" = "xyes:no"; then
 	AC_MSG_ERROR([timerfd header not usable; glibc 2.9+ required])
 fi
 
@@ -234,7 +234,7 @@ AC_MSG_CHECKING([whether to use timerfd for timing])
 if test "x$use_timerfd" = "xno"; then
 	AC_MSG_RESULT([no (disabled by user)])
 else
-	if test "x$timerfd_h" = "x1" -a "x$tfd_hdr_ok" = "xyes"; then
+	if test "x$timerfd_h:$tfd_hdr_ok" = "x1:yes"; then
 		AC_MSG_RESULT([yes])
 		AC_DEFINE(USBI_USING_TIMERFD, 1, [timerfd available and enabled])
 	else
