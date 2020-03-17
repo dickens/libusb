@@ -26,7 +26,7 @@
 
 #include "haiku_usb.h"
 
-int _errno_to_libusb(int status)
+static int _errno_to_libusb(int status)
 {
 	return status;
 }
@@ -127,7 +127,7 @@ USBTransfer::Do(int fRawFD)
 			int i;
 			usb_iso_packet_descriptor *packetDescriptors = new usb_iso_packet_descriptor[fLibusbTransfer->num_iso_packets];
 			for (i = 0; i < fLibusbTransfer->num_iso_packets; i++) {
-				if ((int16)(fLibusbTransfer->iso_packet_desc[i]).length != (fLibusbTransfer->iso_packet_desc[i]).length) {
+				if ((fLibusbTransfer->iso_packet_desc[i]).length > INT16_MAX) {
 					fUsbiTransfer->transferred = -1;
 					usbi_err(TRANSFER_CTX(fLibusbTransfer), "failed isochronous transfer");
 					break;
@@ -222,9 +222,9 @@ USBDeviceHandle::CancelTransfer(USBTransfer *transfer)
 
 USBDeviceHandle::USBDeviceHandle(USBDevice *dev)
 	:
-	fTransfersThread(-1),
 	fUSBDevice(dev),
 	fClaimedInterfaces(0),
+	fTransfersThread(-1),
 	fInitCheck(false)
 {
 	fRawFD = open(dev->Location(), O_RDWR | O_CLOEXEC);
@@ -289,17 +289,17 @@ USBDeviceHandle::SetAltSetting(int inumber, int alt)
 {
 	usb_raw_command command;
 	command.alternate.config_index = fUSBDevice->ActiveConfigurationIndex();
-	command.alternate.interface_index = inumber;
+	command.alternate.interface_index = (uint32)inumber;
 	if (ioctl(fRawFD, B_USB_RAW_COMMAND_GET_ACTIVE_ALT_INTERFACE_INDEX, &command, sizeof(command)) ||
 			command.alternate.status != B_USB_RAW_STATUS_SUCCESS) {
 		usbi_err(NULL, "Error retrieving active alternate interface");
 		return _errno_to_libusb(command.alternate.status);
 	}
-	if (command.alternate.alternate_info == alt) {
+	if (command.alternate.alternate_info == (uint32)alt) {
 		usbi_dbg("Setting alternate interface successful");
 		return LIBUSB_SUCCESS;
 	}
-	command.alternate.alternate_info = alt;
+	command.alternate.alternate_info = (uint32)alt;
 	if (ioctl(fRawFD, B_USB_RAW_COMMAND_SET_ALT_INTERFACE, &command, sizeof(command)) ||
 			command.alternate.status != B_USB_RAW_STATUS_SUCCESS) { //IF IOCTL FAILS DEVICE DISONNECTED PROBABLY
 		usbi_err(NULL, "Error setting alternate interface");
@@ -329,10 +329,10 @@ USBDeviceHandle::ClearHalt(uint8 endpoint)
 
 USBDevice::USBDevice(const char *path)
 	:
-	fPath(NULL),
-	fActiveConfiguration(0),	//0?
-	fConfigurationDescriptors(NULL),
 	fClaimedInterfaces(0),
+	fConfigurationDescriptors(NULL),
+	fActiveConfiguration(0),	//0?
+	fPath(NULL),
 	fEndpointToIndex(NULL),
 	fEndpointToInterface(NULL),
 	fInitCheck(false)

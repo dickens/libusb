@@ -26,7 +26,7 @@ int usbi_cond_timedwait(usbi_cond_t *cond,
 {
 	DWORD millis;
 
-	millis = (DWORD)(tv->tv_sec * 1000L) + (tv->tv_usec / 1000L);
+	millis = (DWORD)((tv->tv_sec * 1000L) + (tv->tv_usec / 1000L));
 	/* round up to next millisecond */
 	if (tv->tv_usec % 1000L)
 		millis++;

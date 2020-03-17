@@ -24,29 +24,29 @@
 
 #include "libusbi.h"
 
-enum usbi_hotplug_flags {
-	/* This callback is interested in device arrivals */
-	USBI_HOTPLUG_DEVICE_ARRIVED = LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED,
+/* Flags for libusb_hotplug_callback */
 
-	/* This callback is interested in device removals */
-	USBI_HOTPLUG_DEVICE_LEFT = LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+/* This callback is interested in device arrivals */
+#define USBI_HOTPLUG_DEVICE_ARRIVED	((unsigned int)LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED)
 
-	/* IMPORTANT: The values for the below entries must start *after*
-	 * the highest value of the above entries!!!
-	 */
+/* This callback is interested in device removals */
+#define USBI_HOTPLUG_DEVICE_LEFT	((unsigned int)LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT)
 
-	/* The vendor_id field is valid for matching */
-	USBI_HOTPLUG_VENDOR_ID_VALID = (1U << 3),
+/* IMPORTANT: The values for the below entries must start *after*
+ * the highest value of the above entries!!!
+ */
 
-	/* The product_id field is valid for matching */
-	USBI_HOTPLUG_PRODUCT_ID_VALID = (1U << 4),
+/* The vendor_id field is valid for matching */
+#define USBI_HOTPLUG_VENDOR_ID_VALID	(1U << 3)
 
-	/* The dev_class field is valid for matching */
-	USBI_HOTPLUG_DEV_CLASS_VALID = (1U << 5),
+/* The product_id field is valid for matching */
+#define USBI_HOTPLUG_PRODUCT_ID_VALID	(1U << 4)
 
-	/* This callback has been unregistered and needs to be freed */
-	USBI_HOTPLUG_NEEDS_FREE = (1U << 6),
-};
+/* The dev_class field is valid for matching */
+#define USBI_HOTPLUG_DEV_CLASS_VALID	(1U << 5)
+
+/* This callback has been unregistered and needs to be freed */
+#define USBI_HOTPLUG_NEEDS_FREE		(1U << 6)
 
 /** \ingroup hotplug
  * The hotplug callback structure. The user populates this structure with
@@ -55,7 +55,7 @@ enum usbi_hotplug_flags {
  */
 struct libusb_hotplug_callback {
 	/** Flags that control how this callback behaves */
-	uint8_t flags;
+	uint32_t flags;
 
 	/** Vendor ID to match (if flags says this is valid) */
 	uint16_t vendor_id;

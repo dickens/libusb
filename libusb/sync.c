@@ -110,7 +110,7 @@ int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 	if (!transfer)
 		return LIBUSB_ERROR_NO_MEM;
 
-	buffer = (unsigned char*) malloc(LIBUSB_CONTROL_SETUP_SIZE + wLength);
+	buffer = malloc((size_t)(LIBUSB_CONTROL_SETUP_SIZE + wLength));
 	if (!buffer) {
 		libusb_free_transfer(transfer);
 		return LIBUSB_ERROR_NO_MEM;
@@ -134,7 +134,7 @@ int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 
 	if ((bmRequestType & LIBUSB_ENDPOINT_DIR_MASK) == LIBUSB_ENDPOINT_IN)
 		memcpy(data, libusb_control_transfer_get_data(transfer),
-			transfer->actual_length);
+			(size_t)transfer->actual_length);
 
 	switch (transfer->status) {
 	case LIBUSB_TRANSFER_COMPLETED:
@@ -158,7 +158,7 @@ int API_EXPORTED libusb_control_transfer(libusb_device_handle *dev_handle,
 		break;
 	default:
 		usbi_warn(HANDLE_CTX(dev_handle),
-			"unrecognised status code %d", transfer->status);
+			"unrecognised status code %u", UINT_CAST(transfer->status));
 		r = LIBUSB_ERROR_OTHER;
 	}
 
@@ -218,7 +218,7 @@ static int do_sync_bulk_transfer(struct libusb_device_handle *dev_handle,
 		break;
 	default:
 		usbi_warn(HANDLE_CTX(dev_handle),
-			"unrecognised status code %d", transfer->status);
+			"unrecognised status code %u", UINT_CAST(transfer->status));
 		r = LIBUSB_ERROR_OTHER;
 	}
 

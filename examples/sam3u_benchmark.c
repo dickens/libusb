@@ -45,7 +45,7 @@ static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr)
 	int i;
 
 	if (xfr->status != LIBUSB_TRANSFER_COMPLETED) {
-		fprintf(stderr, "transfer status %d\n", xfr->status);
+		fprintf(stderr, "transfer status %u\n", (unsigned int)xfr->status);
 		libusb_free_transfer(xfr);
 		exit(3);
 	}
@@ -55,15 +55,15 @@ static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr)
 			struct libusb_iso_packet_descriptor *pack = &xfr->iso_packet_desc[i];
 
 			if (pack->status != LIBUSB_TRANSFER_COMPLETED) {
-				fprintf(stderr, "Error: pack %d status %d\n", i, pack->status);
+				fprintf(stderr, "Error: pack %d status %u\n", i, (unsigned int)pack->status);
 				exit(5);
 			}
 
-			printf("pack%d length:%u, actual_length:%u\n", i, pack->length, pack->actual_length);
+			printf("pack %d length:%u, actual_length:%u\n", i, pack->length, pack->actual_length);
 		}
 	}
 
-	printf("length:%u, actual_length:%u\n", xfr->length, xfr->actual_length);
+	printf("length:%d, actual_length:%d\n", xfr->length, xfr->actual_length);
 	for (i = 0; i < xfr->actual_length; i++) {
 		printf("%02x", xfr->buffer[i]);
 		if (i % 16)
@@ -73,7 +73,7 @@ static void LIBUSB_CALL cb_xfr(struct libusb_transfer *xfr)
 		else
 			printf(" ");
 	}
-	num_bytes += xfr->actual_length;
+	num_bytes += (unsigned int)xfr->actual_length;
 	num_xfer++;
 
 	if (libusb_submit_transfer(xfr) < 0) {
@@ -98,7 +98,7 @@ static int benchmark_in(uint8_t ep)
 	if (ep == EP_ISO_IN) {
 		libusb_fill_iso_transfer(xfr, devh, ep, buf,
 				sizeof(buf), num_iso_pack, cb_xfr, NULL, 0);
-		libusb_set_iso_packet_lengths(xfr, sizeof(buf)/num_iso_pack);
+		libusb_set_iso_packet_lengths(xfr, (unsigned int)(sizeof(buf)/(size_t)num_iso_pack));
 	} else
 		libusb_fill_bulk_transfer(xfr, devh, ep, buf,
 				sizeof(buf), cb_xfr, NULL, 0);
@@ -129,8 +129,8 @@ static void measure(void)
 
 	gettimeofday(&tv_stop, NULL);
 
-	diff_msec = (tv_stop.tv_sec - tv_start.tv_sec) * 1000L;
-	diff_msec += (tv_stop.tv_usec - tv_start.tv_usec) / 1000L;
+	diff_msec = (unsigned long)(tv_stop.tv_sec - tv_start.tv_sec) * 1000UL;
+	diff_msec += (unsigned long)(tv_stop.tv_usec - tv_start.tv_usec) / 1000UL;
 
 	printf("%lu transfers (total %lu bytes) in %lu miliseconds => %lu bytes/sec\n",
 		num_xfer, num_bytes, diff_msec, (num_bytes * 1000L) / diff_msec);

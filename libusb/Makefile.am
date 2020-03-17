@@ -2,7 +2,6 @@ AUTOMAKE_OPTIONS = subdir-objects
 
 AM_CFLAGS += -fvisibility=hidden $(THREAD_CFLAGS)
 AM_CXXFLAGS += -fvisibility=hidden $(THREAD_CFLAGS)
-AM_LDFLAGS = $(LT_LDFLAGS)
 
 lib_LTLIBRARIES = libusb-1.0.la
 
@@ -91,5 +90,6 @@ endif
 libusb_1_0_la_SOURCES = libusbi.h version.h version_nano.h \
 	core.c descriptor.c hotplug.h hotplug.c io.c strerror.c sync.c \
 	$(POLL_SRC) $(THREADS_SRC) $(OS_SRC)
+libusb_1_0_la_LDFLAGS = $(LT_LDFLAGS)
 
 pkginclude_HEADERS = libusb.h

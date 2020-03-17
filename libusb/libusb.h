@@ -38,7 +38,7 @@ typedef SSIZE_T ssize_t;
 #include <limits.h>
 #include <stdint.h>
 #include <sys/types.h>
-#if defined(__linux__) || defined(__APPLE__) || defined(__CYGWIN__) || defined(__HAIKU__) || defined(__GLIBC__)
+#ifndef _MSC_VER
 #include <sys/time.h>
 #endif
 #include <time.h>
@@ -154,8 +154,8 @@ static inline uint16_t libusb_cpu_to_le16(const uint16_t x)
 		uint8_t  b8[2];
 		uint16_t b16;
 	} _tmp;
-	_tmp.b8[1] = (uint8_t) (x >> 8);
-	_tmp.b8[0] = (uint8_t) (x & 0xff);
+	_tmp.b8[1] = (uint8_t)(x >> 8);
+	_tmp.b8[0] = (uint8_t)(x & 0xFFU);
 	return _tmp.b16;
 }
 
@@ -178,102 +178,102 @@ enum libusb_class_code {
 	 * this bDeviceClass value indicates that each interface specifies its
 	 * own class information and all interfaces operate independently.
 	 */
-	LIBUSB_CLASS_PER_INTERFACE = 0,
+	LIBUSB_CLASS_PER_INTERFACE = 0x00U,
 
 	/** Audio class */
-	LIBUSB_CLASS_AUDIO = 1,
+	LIBUSB_CLASS_AUDIO = 0x01U,
 
 	/** Communications class */
-	LIBUSB_CLASS_COMM = 2,
+	LIBUSB_CLASS_COMM = 0x02U,
 
 	/** Human Interface Device class */
-	LIBUSB_CLASS_HID = 3,
+	LIBUSB_CLASS_HID = 0x03U,
 
 	/** Physical */
-	LIBUSB_CLASS_PHYSICAL = 5,
-
-	/** Printer class */
-	LIBUSB_CLASS_PRINTER = 7,
+	LIBUSB_CLASS_PHYSICAL = 0x05U,
 
 	/** Image class */
-	LIBUSB_CLASS_PTP = 6, /* legacy name from libusb-0.1 usb.h */
-	LIBUSB_CLASS_IMAGE = 6,
+	LIBUSB_CLASS_PTP = 0x06U, /* legacy name from libusb-0.1 usb.h */
+	LIBUSB_CLASS_IMAGE = 0x06U,
+
+	/** Printer class */
+	LIBUSB_CLASS_PRINTER = 0x07U,
 
 	/** Mass storage class */
-	LIBUSB_CLASS_MASS_STORAGE = 8,
+	LIBUSB_CLASS_MASS_STORAGE = 0x08U,
 
 	/** Hub class */
-	LIBUSB_CLASS_HUB = 9,
+	LIBUSB_CLASS_HUB = 0x09U,
 
 	/** Data class */
-	LIBUSB_CLASS_DATA = 10,
+	LIBUSB_CLASS_DATA = 0x0AU,
 
 	/** Smart Card */
-	LIBUSB_CLASS_SMART_CARD = 0x0b,
+	LIBUSB_CLASS_SMART_CARD = 0x0BU,
 
 	/** Content Security */
-	LIBUSB_CLASS_CONTENT_SECURITY = 0x0d,
+	LIBUSB_CLASS_CONTENT_SECURITY = 0x0DU,
 
 	/** Video */
-	LIBUSB_CLASS_VIDEO = 0x0e,
+	LIBUSB_CLASS_VIDEO = 0x0EU,
 
 	/** Personal Healthcare */
-	LIBUSB_CLASS_PERSONAL_HEALTHCARE = 0x0f,
+	LIBUSB_CLASS_PERSONAL_HEALTHCARE = 0x0FU,
 
 	/** Diagnostic Device */
-	LIBUSB_CLASS_DIAGNOSTIC_DEVICE = 0xdc,
+	LIBUSB_CLASS_DIAGNOSTIC_DEVICE = 0xDCU,
 
 	/** Wireless class */
-	LIBUSB_CLASS_WIRELESS = 0xe0,
+	LIBUSB_CLASS_WIRELESS = 0xE0U,
 
 	/** Application class */
-	LIBUSB_CLASS_APPLICATION = 0xfe,
+	LIBUSB_CLASS_APPLICATION = 0xFEU,
 
 	/** Class is vendor-specific */
-	LIBUSB_CLASS_VENDOR_SPEC = 0xff
+	LIBUSB_CLASS_VENDOR_SPEC = 0xFFU
 };
 
 /** \ingroup libusb_desc
  * Descriptor types as defined by the USB specification. */
 enum libusb_descriptor_type {
 	/** Device descriptor. See libusb_device_descriptor. */
-	LIBUSB_DT_DEVICE = 0x01,
+	LIBUSB_DT_DEVICE = 0x01U,
 
 	/** Configuration descriptor. See libusb_config_descriptor. */
-	LIBUSB_DT_CONFIG = 0x02,
+	LIBUSB_DT_CONFIG = 0x02U,
 
 	/** String descriptor */
-	LIBUSB_DT_STRING = 0x03,
+	LIBUSB_DT_STRING = 0x03U,
 
 	/** Interface descriptor. See libusb_interface_descriptor. */
-	LIBUSB_DT_INTERFACE = 0x04,
+	LIBUSB_DT_INTERFACE = 0x04U,
 
 	/** Endpoint descriptor. See libusb_endpoint_descriptor. */
-	LIBUSB_DT_ENDPOINT = 0x05,
+	LIBUSB_DT_ENDPOINT = 0x05U,
 
 	/** BOS descriptor */
-	LIBUSB_DT_BOS = 0x0f,
+	LIBUSB_DT_BOS = 0x0FU,
 
 	/** Device Capability descriptor */
-	LIBUSB_DT_DEVICE_CAPABILITY = 0x10,
+	LIBUSB_DT_DEVICE_CAPABILITY = 0x10U,
 
 	/** HID descriptor */
-	LIBUSB_DT_HID = 0x21,
+	LIBUSB_DT_HID = 0x21U,
 
 	/** HID report descriptor */
-	LIBUSB_DT_REPORT = 0x22,
+	LIBUSB_DT_REPORT = 0x22U,
 
 	/** Physical descriptor */
-	LIBUSB_DT_PHYSICAL = 0x23,
+	LIBUSB_DT_PHYSICAL = 0x23U,
 
 	/** Hub descriptor */
-	LIBUSB_DT_HUB = 0x29,
+	LIBUSB_DT_HUB = 0x29U,
 
 	/** SuperSpeed Hub descriptor */
-	LIBUSB_DT_SUPERSPEED_HUB = 0x2a,
+	LIBUSB_DT_SUPERSPEED_HUB = 0x2AU,
 
 	/** SuperSpeed Endpoint Companion descriptor */
-	LIBUSB_DT_SS_ENDPOINT_COMPANION = 0x30
+	LIBUSB_DT_SS_ENDPOINT_COMPANION = 0x30U
 };
 
 /* Descriptor sizes per descriptor type */
@@ -298,22 +298,22 @@ enum libusb_descriptor_type {
 					(LIBUSB_BT_SS_USB_DEVICE_CAPABILITY_SIZE) +\
 					(LIBUSB_BT_CONTAINER_ID_SIZE))
 
-#define LIBUSB_ENDPOINT_ADDRESS_MASK	0x0f    /* in bEndpointAddress */
-#define LIBUSB_ENDPOINT_DIR_MASK		0x80
+#define LIBUSB_ENDPOINT_ADDRESS_MASK	0x0FU	/* in bEndpointAddress */
+#define LIBUSB_ENDPOINT_DIR_MASK	0x80U
 
 /** \ingroup libusb_desc
  * Endpoint direction. Values for bit 7 of the
  * \ref libusb_endpoint_descriptor::bEndpointAddress "endpoint address" scheme.
  */
 enum libusb_endpoint_direction {
-	/** In: device-to-host */
-	LIBUSB_ENDPOINT_IN = 0x80,
-
 	/** Out: host-to-device */
-	LIBUSB_ENDPOINT_OUT = 0x00
+	LIBUSB_ENDPOINT_OUT = 0x00U,
+
+	/** In: device-to-host */
+	LIBUSB_ENDPOINT_IN = 0x80U
 };
 
-#define LIBUSB_TRANSFER_TYPE_MASK			0x03    /* in bmAttributes */
+#define LIBUSB_TRANSFER_TYPE_MASK	0x03U	/* in bmAttributes */
 
 /** \ingroup libusb_desc
  * Endpoint transfer type. Values for bits 0:1 of the
@@ -321,67 +321,67 @@ enum libusb_endpoint_direction {
  */
 enum libusb_transfer_type {
 	/** Control endpoint */
-	LIBUSB_TRANSFER_TYPE_CONTROL = 0,
+	LIBUSB_TRANSFER_TYPE_CONTROL = 0U,
 
 	/** Isochronous endpoint */
-	LIBUSB_TRANSFER_TYPE_ISOCHRONOUS = 1,
+	LIBUSB_TRANSFER_TYPE_ISOCHRONOUS = 1U,
 
 	/** Bulk endpoint */
-	LIBUSB_TRANSFER_TYPE_BULK = 2,
+	LIBUSB_TRANSFER_TYPE_BULK = 2U,
 
 	/** Interrupt endpoint */
-	LIBUSB_TRANSFER_TYPE_INTERRUPT = 3,
+	LIBUSB_TRANSFER_TYPE_INTERRUPT = 3U,
 
 	/** Stream endpoint */
-	LIBUSB_TRANSFER_TYPE_BULK_STREAM = 4,
+	LIBUSB_TRANSFER_TYPE_BULK_STREAM = 4U,
 };
 
 /** \ingroup libusb_misc
  * Standard requests, as defined in table 9-5 of the USB 3.0 specifications */
 enum libusb_standard_request {
 	/** Request status of the specific recipient */
-	LIBUSB_REQUEST_GET_STATUS = 0x00,
+	LIBUSB_REQUEST_GET_STATUS = 0x00U,
 
 	/** Clear or disable a specific feature */
-	LIBUSB_REQUEST_CLEAR_FEATURE = 0x01,
+	LIBUSB_REQUEST_CLEAR_FEATURE = 0x01U,
 
 	/* 0x02 is reserved */
 
 	/** Set or enable a specific feature */
-	LIBUSB_REQUEST_SET_FEATURE = 0x03,
+	LIBUSB_REQUEST_SET_FEATURE = 0x03U,
 
 	/* 0x04 is reserved */
 
 	/** Set device address for all future accesses */
-	LIBUSB_REQUEST_SET_ADDRESS = 0x05,
+	LIBUSB_REQUEST_SET_ADDRESS = 0x05U,
 
 	/** Get the specified descriptor */
-	LIBUSB_REQUEST_GET_DESCRIPTOR = 0x06,
+	LIBUSB_REQUEST_GET_DESCRIPTOR = 0x06U,
 
 	/** Used to update existing descriptors or add new descriptors */
-	LIBUSB_REQUEST_SET_DESCRIPTOR = 0x07,
+	LIBUSB_REQUEST_SET_DESCRIPTOR = 0x07U,
 
 	/** Get the current device configuration value */
-	LIBUSB_REQUEST_GET_CONFIGURATION = 0x08,
+	LIBUSB_REQUEST_GET_CONFIGURATION = 0x08U,
 
 	/** Set device configuration */
-	LIBUSB_REQUEST_SET_CONFIGURATION = 0x09,
+	LIBUSB_REQUEST_SET_CONFIGURATION = 0x09U,
 
 	/** Return the selected alternate setting for the specified interface */
-	LIBUSB_REQUEST_GET_INTERFACE = 0x0A,
+	LIBUSB_REQUEST_GET_INTERFACE = 0x0AU,
 
 	/** Select an alternate interface for the specified interface */
-	LIBUSB_REQUEST_SET_INTERFACE = 0x0B,
+	LIBUSB_REQUEST_SET_INTERFACE = 0x0BU,
 
 	/** Set then report an endpoint's synchronization frame */
-	LIBUSB_REQUEST_SYNCH_FRAME = 0x0C,
+	LIBUSB_REQUEST_SYNCH_FRAME = 0x0CU,
 
 	/** Sets both the U1 and U2 Exit Latency */
-	LIBUSB_REQUEST_SET_SEL = 0x30,
+	LIBUSB_REQUEST_SET_SEL = 0x30U,
 
 	/** Delay from the time a host transmits a packet to the time it is
 	  * received by the device. */
-	LIBUSB_SET_ISOCH_DELAY = 0x31,
+	LIBUSB_SET_ISOCH_DELAY = 0x31U,
 };
 
 /** \ingroup libusb_misc
@@ -390,16 +390,16 @@ enum libusb_standard_request {
  * transfers. */
 enum libusb_request_type {
 	/** Standard */
-	LIBUSB_REQUEST_TYPE_STANDARD = (0x00 << 5),
+	LIBUSB_REQUEST_TYPE_STANDARD = 0x00U << 5,
 
 	/** Class */
-	LIBUSB_REQUEST_TYPE_CLASS = (0x01 << 5),
+	LIBUSB_REQUEST_TYPE_CLASS = 0x01U << 5,
 
 	/** Vendor */
-	LIBUSB_REQUEST_TYPE_VENDOR = (0x02 << 5),
+	LIBUSB_REQUEST_TYPE_VENDOR = 0x02U << 5,
 
 	/** Reserved */
-	LIBUSB_REQUEST_TYPE_RESERVED = (0x03 << 5)
+	LIBUSB_REQUEST_TYPE_RESERVED = 0x03U << 5
 };
 
 /** \ingroup libusb_misc
@@ -408,19 +408,19 @@ enum libusb_request_type {
  * transfers. Values 4 through 31 are reserved. */
 enum libusb_request_recipient {
 	/** Device */
-	LIBUSB_RECIPIENT_DEVICE = 0x00,
+	LIBUSB_RECIPIENT_DEVICE = 0x00U,
 
 	/** Interface */
-	LIBUSB_RECIPIENT_INTERFACE = 0x01,
+	LIBUSB_RECIPIENT_INTERFACE = 0x01U,
 
 	/** Endpoint */
-	LIBUSB_RECIPIENT_ENDPOINT = 0x02,
+	LIBUSB_RECIPIENT_ENDPOINT = 0x02U,
 
 	/** Other */
-	LIBUSB_RECIPIENT_OTHER = 0x03,
+	LIBUSB_RECIPIENT_OTHER = 0x03U,
 };
 
-#define LIBUSB_ISO_SYNC_TYPE_MASK		0x0C
+#define LIBUSB_ISO_SYNC_TYPE_MASK	0x0CU
 
 /** \ingroup libusb_desc
  * Synchronization type for isochronous endpoints. Values for bits 2:3 of the
@@ -429,19 +429,19 @@ enum libusb_request_recipient {
  */
 enum libusb_iso_sync_type {
 	/** No synchronization */
-	LIBUSB_ISO_SYNC_TYPE_NONE = 0,
+	LIBUSB_ISO_SYNC_TYPE_NONE = 0x00U,
 
 	/** Asynchronous */
-	LIBUSB_ISO_SYNC_TYPE_ASYNC = 1,
+	LIBUSB_ISO_SYNC_TYPE_ASYNC = 0x01U,
 
 	/** Adaptive */
-	LIBUSB_ISO_SYNC_TYPE_ADAPTIVE = 2,
+	LIBUSB_ISO_SYNC_TYPE_ADAPTIVE = 0x02U,
 
 	/** Synchronous */
-	LIBUSB_ISO_SYNC_TYPE_SYNC = 3
+	LIBUSB_ISO_SYNC_TYPE_SYNC = 0x03U
 };
 
-#define LIBUSB_ISO_USAGE_TYPE_MASK 0x30
+#define LIBUSB_ISO_USAGE_TYPE_MASK	0x30U
 
 /** \ingroup libusb_desc
  * Usage type for isochronous endpoints. Values for bits 4:5 of the
@@ -450,13 +450,13 @@ enum libusb_iso_sync_type {
  */
 enum libusb_iso_usage_type {
 	/** Data endpoint */
-	LIBUSB_ISO_USAGE_TYPE_DATA = 0,
+	LIBUSB_ISO_USAGE_TYPE_DATA = 0x00U,
 
 	/** Feedback endpoint */
-	LIBUSB_ISO_USAGE_TYPE_FEEDBACK = 1,
+	LIBUSB_ISO_USAGE_TYPE_FEEDBACK = 0x01U,
 
 	/** Implicit feedback Data endpoint */
-	LIBUSB_ISO_USAGE_TYPE_IMPLICIT = 2,
+	LIBUSB_ISO_USAGE_TYPE_IMPLICIT = 0x02U,
 };
 
 /** \ingroup libusb_desc
@@ -870,7 +870,7 @@ struct libusb_control_setup {
 	uint16_t wLength;
 };
 
-#define LIBUSB_CONTROL_SETUP_SIZE (sizeof(struct libusb_control_setup))
+#define LIBUSB_CONTROL_SETUP_SIZE	8
 
 /* libusb */
 
@@ -977,16 +977,16 @@ enum libusb_speed {
  */
 enum libusb_supported_speed {
 	/** Low speed operation supported (1.5MBit/s). */
-	LIBUSB_LOW_SPEED_OPERATION   = 1,
+	LIBUSB_LOW_SPEED_OPERATION = 1U << 0,
 
 	/** Full speed operation supported (12MBit/s). */
-	LIBUSB_FULL_SPEED_OPERATION  = 2,
+	LIBUSB_FULL_SPEED_OPERATION = 1U << 1,
 
 	/** High speed operation supported (480MBit/s). */
-	LIBUSB_HIGH_SPEED_OPERATION  = 4,
+	LIBUSB_HIGH_SPEED_OPERATION = 1U << 2,
 
 	/** Superspeed operation supported (5000MBit/s). */
-	LIBUSB_SUPER_SPEED_OPERATION = 8,
+	LIBUSB_SUPER_SPEED_OPERATION = 1U << 3,
 };
 
 /** \ingroup libusb_dev
@@ -996,7 +996,7 @@ enum libusb_supported_speed {
  */
 enum libusb_usb_2_0_extension_attributes {
 	/** Supports Link Power Management (LPM) */
-	LIBUSB_BM_LPM_SUPPORT = 2,
+	LIBUSB_BM_LPM_SUPPORT = 1U << 1,
 };
 
 /** \ingroup libusb_dev
@@ -1006,7 +1006,7 @@ enum libusb_usb_2_0_extension_attributes {
  */
 enum libusb_ss_usb_device_capability_attributes {
 	/** Supports Latency Tolerance Messages (LTM) */
-	LIBUSB_BM_LTM_SUPPORT = 2,
+	LIBUSB_BM_LTM_SUPPORT = 1U << 1,
 };
 
 /** \ingroup libusb_dev
@@ -1014,16 +1014,16 @@ enum libusb_ss_usb_device_capability_attributes {
  */
 enum libusb_bos_type {
 	/** Wireless USB device capability */
-	LIBUSB_BT_WIRELESS_USB_DEVICE_CAPABILITY	= 1,
+	LIBUSB_BT_WIRELESS_USB_DEVICE_CAPABILITY = 0x01U,
 
 	/** USB 2.0 extensions */
-	LIBUSB_BT_USB_2_0_EXTENSION			= 2,
+	LIBUSB_BT_USB_2_0_EXTENSION = 0x02U,
 
 	/** SuperSpeed USB device capability */
-	LIBUSB_BT_SS_USB_DEVICE_CAPABILITY		= 3,
+	LIBUSB_BT_SS_USB_DEVICE_CAPABILITY = 0x03U,
 
 	/** Container ID type */
-	LIBUSB_BT_CONTAINER_ID				= 4,
+	LIBUSB_BT_CONTAINER_ID = 0x04U,
 };
 
 /** \ingroup libusb_misc
@@ -1248,17 +1248,20 @@ struct libusb_transfer {
  */
 enum libusb_capability {
 	/** The libusb_has_capability() API is available. */
-	LIBUSB_CAP_HAS_CAPABILITY = 0x0000,
+	LIBUSB_CAP_HAS_CAPABILITY = 0x0000U,
+
 	/** Hotplug support is available on this platform. */
-	LIBUSB_CAP_HAS_HOTPLUG = 0x0001,
+	LIBUSB_CAP_HAS_HOTPLUG = 0x0001U,
+
 	/** The library can access HID devices without requiring user intervention.
 	 * Note that before being able to actually access an HID device, you may
 	 * still have to call additional libusb functions such as
 	 * \ref libusb_detach_kernel_driver(). */
-	LIBUSB_CAP_HAS_HID_ACCESS = 0x0100,
+	LIBUSB_CAP_HAS_HID_ACCESS = 0x0100U,
+
 	/** The library supports detaching of the default USB driver, using 
 	 * \ref libusb_detach_kernel_driver(), if one is set by the OS kernel */
-	LIBUSB_CAP_SUPPORTS_DETACH_KERNEL_DRIVER = 0x0101
+	LIBUSB_CAP_SUPPORTS_DETACH_KERNEL_DRIVER = 0x0101U
 };
 
 /** \ingroup libusb_lib
@@ -1445,7 +1448,7 @@ static inline unsigned char *libusb_control_transfer_get_data(
 static inline struct libusb_control_setup *libusb_control_transfer_get_setup(
 	struct libusb_transfer *transfer)
 {
-	return (struct libusb_control_setup *)(void *) transfer->buffer;
+	return (struct libusb_control_setup *)(void *)transfer->buffer;
 }
 
 /** \ingroup libusb_asyncio
@@ -1475,7 +1478,7 @@ static inline void libusb_fill_control_setup(unsigned char *buffer,
 	uint8_t bmRequestType, uint8_t bRequest, uint16_t wValue, uint16_t wIndex,
 	uint16_t wLength)
 {
-	struct libusb_control_setup *setup = (struct libusb_control_setup *)(void *) buffer;
+	struct libusb_control_setup *setup = (struct libusb_control_setup *)(void *)buffer;
 	setup->bmRequestType = bmRequestType;
 	setup->bRequest = bRequest;
 	setup->wValue = libusb_cpu_to_le16(wValue);
@@ -1525,14 +1528,14 @@ static inline void libusb_fill_control_transfer(
 	unsigned char *buffer, libusb_transfer_cb_fn callback, void *user_data,
 	unsigned int timeout)
 {
-	struct libusb_control_setup *setup = (struct libusb_control_setup *)(void *) buffer;
+	struct libusb_control_setup *setup = (struct libusb_control_setup *)(void *)buffer;
 	transfer->dev_handle = dev_handle;
 	transfer->endpoint = 0;
 	transfer->type = LIBUSB_TRANSFER_TYPE_CONTROL;
 	transfer->timeout = timeout;
 	transfer->buffer = buffer;
 	if (setup)
-		transfer->length = (int) (LIBUSB_CONTROL_SETUP_SIZE
+		transfer->length = (LIBUSB_CONTROL_SETUP_SIZE
 			+ libusb_le16_to_cpu(setup->wLength));
 	transfer->user_data = user_data;
 	transfer->callback = callback;
@@ -1687,21 +1690,19 @@ static inline void libusb_set_iso_packet_lengths(
 static inline unsigned char *libusb_get_iso_packet_buffer(
 	struct libusb_transfer *transfer, unsigned int packet)
 {
-	int i;
 	size_t offset = 0;
-	int _packet;
+	unsigned int i;
 
 	/* oops..slight bug in the API. packet is an unsigned int, but we use
 	 * signed integers almost everywhere else. range-check and convert to
 	 * signed to avoid compiler warnings. FIXME for libusb-2. */
 	if (packet > INT_MAX)
 		return NULL;
-	_packet = (int) packet;
 
-	if (_packet >= transfer->num_iso_packets)
+	if ((int)packet >= transfer->num_iso_packets)
 		return NULL;
 
-	for (i = 0; i < _packet; i++)
+	for (i = 0; i < packet; i++)
 		offset += transfer->iso_packet_desc[i].length;
 
 	return transfer->buffer + offset;
@@ -1729,19 +1730,16 @@ static inline unsigned char *libusb_get_iso_packet_buffer(
 static inline unsigned char *libusb_get_iso_packet_buffer_simple(
 	struct libusb_transfer *transfer, unsigned int packet)
 {
-	int _packet;
-
 	/* oops..slight bug in the API. packet is an unsigned int, but we use
 	 * signed integers almost everywhere else. range-check and convert to
 	 * signed to avoid compiler warnings. FIXME for libusb-2. */
 	if (packet > INT_MAX)
 		return NULL;
-	_packet = (int) packet;
 
-	if (_packet >= transfer->num_iso_packets)
+	if ((int)packet >= transfer->num_iso_packets)
 		return NULL;
 
-	return transfer->buffer + ((int) transfer->iso_packet_desc[0].length * _packet);
+	return transfer->buffer + (transfer->iso_packet_desc[0].length * packet);
 }
 
 /* sync I/O */
@@ -1774,8 +1772,8 @@ static inline int libusb_get_descriptor(libusb_device_handle *dev_handle,
 	uint8_t desc_type, uint8_t desc_index, unsigned char *data, int length)
 {
 	return libusb_control_transfer(dev_handle, LIBUSB_ENDPOINT_IN,
-		LIBUSB_REQUEST_GET_DESCRIPTOR, (uint16_t) ((desc_type << 8) | desc_index),
-		0, data, (uint16_t) length, 1000);
+		LIBUSB_REQUEST_GET_DESCRIPTOR, (uint16_t)((desc_type << 8) | desc_index),
+		0, data, (uint16_t)length, 1000);
 }
 
 /** \ingroup libusb_desc
@@ -1797,7 +1795,7 @@ static inline int libusb_get_string_descriptor(libusb_device_handle *dev_handle,
 {
 	return libusb_control_transfer(dev_handle, LIBUSB_ENDPOINT_IN,
 		LIBUSB_REQUEST_GET_DESCRIPTOR, (uint16_t)((LIBUSB_DT_STRING << 8) | desc_index),
-		langid, data, (uint16_t) length, 1000);
+		langid, data, (uint16_t)length, 1000);
 }
 
 int LIBUSB_CALL libusb_get_string_descriptor_ascii(libusb_device_handle *dev_handle,

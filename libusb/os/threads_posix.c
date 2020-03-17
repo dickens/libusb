@@ -58,53 +58,51 @@ int usbi_cond_timedwait(pthread_cond_t *cond,
 	return pthread_cond_timedwait(cond, mutex, &timeout);
 }
 
-int usbi_get_tid(void)
+unsigned int usbi_get_tid(void)
 {
-#ifndef _WIN32
-	static _Thread_local int tid;
+#if !(defined(_WIN32) || defined(__CYGWIN__))
+	static _Thread_local unsigned int tid;
 
 	if (tid)
 		return tid;
 #else
-	int tid;
+	unsigned int tid;
 #endif
 
 #if defined(__ANDROID__)
-	tid = gettid();
+	tid = (unsigned int)gettid();
 #elif defined(__APPLE__)
 #ifdef HAVE_PTHREAD_THREADID_NP
 	uint64_t thread_id;
 
 	if (pthread_threadid_np(NULL, &thread_id) == 0)
-		tid = (int)thread_id;
+		tid = (unsigned int)thread_id;
 	else
-		tid = -1;
+		tid = UINT_MAX;
 #else
-	tid = (int)pthread_mach_thread_np(pthread_self());
+	tid = (unsigned int)pthread_mach_thread_np(pthread_self());
 #endif
 #elif defined(__HAIKU__)
-	tid = get_pthread_thread_id(pthread_self());
+	tid = (unsigned int)get_pthread_thread_id(pthread_self());
 #elif defined(__linux__)
-	tid = (int)syscall(SYS_gettid);
-#elif defined(__NetBSD__)
-	tid = _lwp_self();
+	tid = (unsigned int)syscall(SYS_gettid);
+#elif defined(__NetBSD__) || defined(__sun__)
+	tid = (unsigned int)_lwp_self();
 #elif defined(__OpenBSD__)
 	/* The following only works with OpenBSD > 5.1 as it requires
 	 * real thread support. For 5.1 and earlier, -1 is returned. */
-	tid = syscall(SYS_getthrid);
-#elif defined(__sun__)
-	tid = _lwp_self();
-#elif defined(_WIN32)
-	tid = (int)GetCurrentThreadId();
+	tid = (unsigned int)syscall(SYS_getthrid);
+#elif defined(_WIN32) || defined(__CYGWIN__)
+	tid = (unsigned int)GetCurrentThreadId();
 #else
-	tid = -1;
+	tid = UINT_MAX;
 #endif
 
-	if (tid == -1) {
+	if (tid == UINT_MAX) {
 		/* If we don't have a thread ID, at least return a unique
 		 * value that can be used to distinguish individual
 		 * threads. */
-		tid = (int)(intptr_t)pthread_self();
+		tid = (unsigned int)(uintptr_t)pthread_self();
 	}
 
 	return tid;

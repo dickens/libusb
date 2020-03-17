@@ -315,7 +315,7 @@ static void LIBUSB_CALL cb_irq(struct libusb_transfer *transfer)
 	unsigned char irqtype = transfer->buffer[0];
 
 	if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-		fprintf(stderr, "irq transfer status %d?\n", transfer->status);
+		fprintf(stderr, "irq transfer status %u?\n", (unsigned int)transfer->status);
 		irq_transfer = NULL;
 		request_exit(2);
 		return;
@@ -351,7 +351,7 @@ static void LIBUSB_CALL cb_irq(struct libusb_transfer *transfer)
 static void LIBUSB_CALL cb_img(struct libusb_transfer *transfer)
 {
 	if (transfer->status != LIBUSB_TRANSFER_COMPLETED) {
-		fprintf(stderr, "img transfer status %d?\n", transfer->status);
+		fprintf(stderr, "img transfer status %u?\n", (unsigned int)transfer->status);
 		img_transfer = NULL;
 		request_exit(2);
 		return;
@@ -407,7 +407,7 @@ static int do_init(void)
 			return r;
 	}
 
-	status &= ~0x80;
+	status = (unsigned char)(status & ~0x80);
 	r = set_hwstat(status);
 	if (r < 0)
 		return r;

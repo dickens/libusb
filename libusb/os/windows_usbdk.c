@@ -61,9 +61,11 @@ static struct {
 	USBDK_GET_REDIRECTOR_SYSTEM_HANDLE	GetRedirectorSystemHandle;
 } usbdk_helper;
 
-static FARPROC get_usbdk_proc_addr(struct libusb_context *ctx, LPCSTR api_name)
+typedef void (*FUNCPTR)(void);
+
+static FUNCPTR get_usbdk_proc_addr(struct libusb_context *ctx, LPCSTR api_name)
 {
-	FARPROC api_ptr = GetProcAddress(usbdk_helper.module, api_name);
+	FUNCPTR api_ptr = DLL_GET_FUNC_ADDR(usbdk_helper.module, api_name);
 
 	if (api_ptr == NULL)
 		usbi_err(ctx, "UsbDkHelper API %s not found: %s", api_name, windows_error_str(0));
@@ -166,17 +168,17 @@ static int usbdk_init(struct libusb_context *ctx)
 		return LIBUSB_ERROR_OTHER;
 	}
 
-	pOpenSCManagerA = (POPENSCMANAGERA)GetProcAddress(h, "OpenSCManagerA");
+	pOpenSCManagerA = (POPENSCMANAGERA)DLL_GET_FUNC_ADDR(h, "OpenSCManagerA");
 	if (pOpenSCManagerA == NULL) {
 		usbi_warn(ctx, "failed to find %s in Advapi32\n", "OpenSCManagerA");
 		goto error_free_library;
 	}
-	pOpenServiceA = (POPENSERVICEA)GetProcAddress(h, "OpenServiceA");
+	pOpenServiceA = (POPENSERVICEA)DLL_GET_FUNC_ADDR(h, "OpenServiceA");
 	if (pOpenServiceA == NULL) {
 		usbi_warn(ctx, "failed to find %s in Advapi32\n", "OpenServiceA");
 		goto error_free_library;
 	}
-	pCloseServiceHandle = (PCLOSESERVICEHANDLE)GetProcAddress(h, "CloseServiceHandle");
+	pCloseServiceHandle = (PCLOSESERVICEHANDLE)DLL_GET_FUNC_ADDR(h, "CloseServiceHandle");
 	if (pCloseServiceHandle == NULL) {
 		usbi_warn(ctx, "failed to find %s in Advapi32\n", "CloseServiceHandle");
 		goto error_free_library;
@@ -454,7 +456,7 @@ static int usbdk_set_interface_altsetting(struct libusb_device_handle *dev_handl
 {
 	struct usbdk_device_priv *priv = usbi_get_device_priv(dev_handle->dev);
 
-	if (!usbdk_helper.SetAltsetting(priv->redirector_handle, iface, altsetting)) {
+	if (!usbdk_helper.SetAltsetting(priv->redirector_handle, (ULONG64)iface, (ULONG64)altsetting)) {
 		usbi_err(HANDLE_CTX(dev_handle), "SetAltsetting failed: %s", windows_error_str(0));
 		return LIBUSB_ERROR_NO_DEVICE;
 	}
@@ -521,7 +523,7 @@ static int usbdk_do_control_transfer(struct usbi_transfer *itransfer)
 	TransferResult transResult;
 
 	transfer_priv->request.Buffer = (PVOID64)transfer->buffer;
-	transfer_priv->request.BufferLength = transfer->length;
+	transfer_priv->request.BufferLength = (ULONG64)transfer->length;
 	transfer_priv->request.TransferType = ControlTransferType;
 
 	if (transfer->buffer[0] & LIBUSB_ENDPOINT_IN)
@@ -554,7 +556,7 @@ static int usbdk_do_bulk_transfer(struct usbi_transfer *itransfer)
 	TransferResult transferRes;
 
 	transfer_priv->request.Buffer = (PVOID64)transfer->buffer;
-	transfer_priv->request.BufferLength = transfer->length;
+	transfer_priv->request.BufferLength = (ULONG64)transfer->length;
 	transfer_priv->request.EndpointAddress = transfer->endpoint;
 
 	switch (transfer->type) {
@@ -597,18 +599,18 @@ static int usbdk_do_iso_transfer(struct usbi_transfer *itransfer)
 	int i;
 
 	transfer_priv->request.Buffer = (PVOID64)transfer->buffer;
-	transfer_priv->request.BufferLength = transfer->length;
+	transfer_priv->request.BufferLength = (ULONG64)transfer->length;
 	transfer_priv->request.EndpointAddress = transfer->endpoint;
 	transfer_priv->request.TransferType = IsochronousTransferType;
-	transfer_priv->request.IsochronousPacketsArraySize = transfer->num_iso_packets;
-	transfer_priv->IsochronousPacketsArray = malloc(transfer->num_iso_packets * sizeof(ULONG64));
+	transfer_priv->request.IsochronousPacketsArraySize = (ULONG64)transfer->num_iso_packets;
+	transfer_priv->IsochronousPacketsArray = malloc((size_t)transfer->num_iso_packets * sizeof(ULONG64));
 	transfer_priv->request.IsochronousPacketsArray = (PVOID64)transfer_priv->IsochronousPacketsArray;
 	if (!transfer_priv->IsochronousPacketsArray) {
 		usbi_err(TRANSFER_CTX(transfer), "Allocation of IsochronousPacketsArray failed");
 		return LIBUSB_ERROR_NO_MEM;
 	}
 
-	transfer_priv->IsochronousResultsArray = malloc(transfer->num_iso_packets * sizeof(USB_DK_ISO_TRANSFER_RESULT));
+	transfer_priv->IsochronousResultsArray = malloc((size_t)transfer->num_iso_packets * sizeof(USB_DK_ISO_TRANSFER_RESULT));
 	transfer_priv->request.Result.IsochronousResultsArray = (PVOID64)transfer_priv->IsochronousResultsArray;
 	if (!transfer_priv->IsochronousResultsArray) {
 		usbi_err(TRANSFER_CTX(transfer), "Allocation of isochronousResultsArray failed");
@@ -655,7 +657,7 @@ static int usbdk_submit_transfer(struct usbi_transfer *itransfer)
 	default:
 		// Should not get here since windows_submit_transfer() validates
 		// the transfer->type field
-		usbi_err(TRANSFER_CTX(transfer), "unsupported endpoint type %d", transfer->type);
+		usbi_err(TRANSFER_CTX(transfer), "unsupported endpoint type %u", transfer->type);
 		return LIBUSB_ERROR_NOT_SUPPORTED;
 	}
 }
@@ -673,7 +675,7 @@ static enum libusb_transfer_status usbdk_copy_transfer_data(struct usbi_transfer
 		for (i = 0; i < transfer_priv->request.IsochronousPacketsArraySize; i++) {
 			struct libusb_iso_packet_descriptor *lib_desc = &transfer->iso_packet_desc[i];
 
-			switch (transfer_priv->IsochronousResultsArray[i].TransferResult) {
+			switch ((NTSTATUS)transfer_priv->IsochronousResultsArray[i].TransferResult) {
 			case STATUS_SUCCESS:
 			case STATUS_CANCELLED:
 			case STATUS_REQUEST_CANCELED:

@@ -69,12 +69,12 @@ const char *windows_error_str(DWORD error_code)
 	// Translate codes returned by SetupAPI. The ones we are dealing with are either
 	// in 0x0000xxxx or 0xE000xxxx and can be distinguished from standard error codes.
 	// See http://msdn.microsoft.com/en-us/library/windows/hardware/ff545011.aspx
-	switch (error_code & 0xE0000000) {
+	switch (error_code & 0xE0000000U) {
 	case 0:
-		error_code = HRESULT_FROM_WIN32(error_code); // Still leaves ERROR_SUCCESS unmodified
+		error_code = (DWORD)HRESULT_FROM_WIN32(error_code); // Still leaves ERROR_SUCCESS unmodified
 		break;
 	case 0xE0000000:
-		error_code = 0x80000000 | (FACILITY_SETUPAPI << 16) | (error_code & 0x0000FFFF);
+		error_code = 0x80000000U | (FACILITY_SETUPAPI << 16) | (error_code & 0x0000FFFFU);
 		break;
 	default:
 		break;
@@ -82,7 +82,7 @@ const char *windows_error_str(DWORD error_code)
 
 	size = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM|FORMAT_MESSAGE_IGNORE_INSERTS,
 			NULL, error_code, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
-			&err_string[len], sizeof(err_string) - len, NULL);
+			&err_string[len], (DWORD)(sizeof(err_string) - (size_t)len), NULL);
 	if (size == 0) {
 		DWORD format_error = GetLastError();
 		if (format_error)
@@ -94,7 +94,7 @@ const char *windows_error_str(DWORD error_code)
 				ULONG_CAST(error_code));
 	} else {
 		// Remove CRLF from end of message, if present
-		size_t pos = len + size - 2;
+		size_t pos = (size_t)(len + (int)size - 2);
 		if (err_string[pos] == '\r')
 			err_string[pos] = '\0';
 	}
@@ -182,7 +182,7 @@ unsigned long htab_hash(const char *str)
 
 	// Compute main hash value (algorithm suggested by Nokia)
 	while ((c = *sz++) != 0)
-		r = ((r << 5) + r) + c;
+		r = ((r << 5) + r) + (unsigned long)c;
 	if (r == 0)
 		++r;
 
@@ -289,7 +289,7 @@ static void windows_init_clock(void)
 
 	// The hires frequency can go as high as 4 GHz, so we'll use a conversion
 	// to picoseconds to compute the tv_nsecs part in clock_gettime
-	hires_frequency = li_frequency.QuadPart;
+	hires_frequency = (uint64_t)li_frequency.QuadPart;
 	hires_ticks_to_ps = UINT64_C(1000000000000) / hires_frequency;
 	usbi_dbg("hires timer frequency: %"PRIu64" Hz", hires_frequency);
 #endif
@@ -701,7 +701,7 @@ static int windows_submit_transfer(struct usbi_transfer *itransfer)
 		usbi_warn(ctx, "bulk stream transfers are not yet supported on this platform");
 		return LIBUSB_ERROR_NOT_SUPPORTED;
 	default:
-		usbi_err(ctx, "unknown endpoint type %d", transfer->type);
+		usbi_err(ctx, "unknown endpoint type %u", transfer->type);
 		return LIBUSB_ERROR_INVALID_PARAM;
 	}
 
@@ -778,7 +778,7 @@ static int windows_handle_events(struct libusb_context *ctx, struct pollfd *fds,
 
 	usbi_mutex_lock(&ctx->open_devs_lock);
 	for (i = 0; i < nfds && num_ready > 0; i++) {
-		usbi_dbg("checking fd %d with revents = %04x", fds[i].fd, fds[i].revents);
+		usbi_dbg("checking fd %d with revents = %04x", fds[i].fd, UINT_CAST(fds[i].revents));
 
 		if (!fds[i].revents)
 			continue;
@@ -828,8 +828,8 @@ int usbi_clock_gettime(int clk_id, struct timespec *tp)
 	case USBI_CLOCK_MONOTONIC:
 		if (hires_frequency) {
 			QueryPerformanceCounter(&hires_counter);
-			tp->tv_sec = (long)(hires_counter.QuadPart / hires_frequency);
-			tp->tv_nsec = (long)(((hires_counter.QuadPart % hires_frequency) * hires_ticks_to_ps) / UINT64_C(1000));
+			tp->tv_sec = (long)((uint64_t)hires_counter.QuadPart / hires_frequency);
+			tp->tv_nsec = (long)((((uint64_t)hires_counter.QuadPart % hires_frequency) * hires_ticks_to_ps) / UINT64_C(1000));
 			return 0;
 		}
 		// Return real-time if monotonic was not detected @ timer init

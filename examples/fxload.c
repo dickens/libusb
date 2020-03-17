@@ -32,7 +32,7 @@
 #include "libusb.h"
 #include "ezusb.h"
 
-#if !defined(_WIN32) || defined(__CYGWIN__ )
+#if !defined(_WIN32) || defined(__CYGWIN__)
 #include <syslog.h>
 static bool dosyslog = false;
 #include <strings.h>
@@ -48,14 +48,14 @@ static bool dosyslog = false;
 #endif
 
 void logerror(const char *format, ...)
-	__attribute__ ((format (__printf__, 1, 2)));
+	__attribute__ ((__format__ (__printf__, 1, 2)));
 
 void logerror(const char *format, ...)
 {
 	va_list ap;
-	va_start(ap, format);
 
-#if !defined(_WIN32) || defined(__CYGWIN__ )
+	va_start(ap, format);
+#if !defined(_WIN32) || defined(__CYGWIN__)
 	if (dosyslog)
 		vsyslog(LOG_ERR, format, ap);
 	else
@@ -162,11 +162,11 @@ int main(int argc, char*argv[])
 	if (type != NULL) {
 		for (i=0; i<FX_TYPE_MAX; i++) {
 			if (strcmp(type, fx_name[i]) == 0) {
-				fx_type = i;
+				fx_type = (int)i;
 				break;
 			}
 		}
-		if (i >= FX_TYPE_MAX) {
+		if (i == FX_TYPE_MAX) {
 			logerror("illegal microcontroller type: %s\n", type);
 			return print_usage(-1);
 		}
@@ -197,7 +197,7 @@ int main(int argc, char*argv[])
 				status = libusb_get_device_descriptor(dev, &desc);
 				if (status >= 0) {
 					if (verbose >= 3) {
-						logerror("examining %04x:%04x (%d,%d)\n",
+						logerror("examining %04x:%04x (%u,%u)\n",
 							desc.idVendor, desc.idProduct, _busnum, _devaddr);
 					}
 					for (j=0; j<ARRAYSIZE(known_device); j++) {
@@ -222,7 +222,7 @@ int main(int argc, char*argv[])
 					}
 					if (j < ARRAYSIZE(known_device)) {
 						if (verbose)
-							logerror("found device '%s' [%04x:%04x] (%d,%d)\n",
+							logerror("found device '%s' [%04x:%04x] (%u,%u)\n",
 								known_device[j].designation, vid, pid, busnum, devaddr);
 						break;
 					}

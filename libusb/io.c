@@ -1206,7 +1206,7 @@ static int calculate_timeout(struct usbi_transfer *itransfer)
 		USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer)->timeout;
 
 	if (!timeout) {
-		TIMESPEC_CLEAR(&itransfer->timeout);
+		USBI_TIMESPEC_CLEAR(&itransfer->timeout);
 		return 0;
 	}
 
@@ -1218,7 +1218,7 @@ static int calculate_timeout(struct usbi_transfer *itransfer)
 	}
 
 	itransfer->timeout.tv_sec += timeout / 1000U;
-	itransfer->timeout.tv_nsec += (timeout % 1000U) * 1000000L;
+	itransfer->timeout.tv_nsec += (long)(timeout % 1000U) * 1000000L;
 	if (itransfer->timeout.tv_nsec >= 1000000000L) {
 		++itransfer->timeout.tv_sec;
 		itransfer->timeout.tv_nsec -= 1000000000L;
@@ -1349,7 +1349,7 @@ static int arm_timerfd_for_next_timeout(struct libusb_context *ctx)
 
 		/* if we've reached transfers of infinite timeout, then we have no
 		 * arming to do */
-		if (!TIMESPEC_IS_SET(cur_ts))
+		if (!USBI_TIMESPEC_IS_SET(cur_ts))
 			goto disarm;
 
 		/* act on first transfer that has not already been handled */
@@ -1398,7 +1398,7 @@ static int add_to_flying_list(struct usbi_transfer *itransfer)
 	}
 
 	/* if we have infinite timeout, append to end of list */
-	if (!TIMESPEC_IS_SET(timeout)) {
+	if (!USBI_TIMESPEC_IS_SET(timeout)) {
 		list_add_tail(&itransfer->list, &ctx->flying_transfers);
 		/* first is irrelevant in this case */
 		goto out;
@@ -1409,7 +1409,7 @@ static int add_to_flying_list(struct usbi_transfer *itransfer)
 		/* find first timeout that occurs after the transfer in question */
 		struct timespec *cur_ts = &cur->timeout;
 
-		if (!TIMESPEC_IS_SET(cur_ts) || TIMESPEC_CMP(cur_ts, timeout, >)) {
+		if (!USBI_TIMESPEC_IS_SET(cur_ts) || USBI_TIMESPEC_CMP(cur_ts, timeout, >)) {
 			list_add_tail(&itransfer->list, &cur->list);
 			goto out;
 		}
@@ -1421,7 +1421,7 @@ static int add_to_flying_list(struct usbi_transfer *itransfer)
 	list_add_tail(&itransfer->list, &ctx->flying_transfers);
 out:
 #ifdef HAVE_TIMERFD
-	if (first && usbi_using_timerfd(ctx) && TIMESPEC_IS_SET(timeout)) {
+	if (first && usbi_using_timerfd(ctx) && USBI_TIMESPEC_IS_SET(timeout)) {
 		/* if this transfer has the lowest timeout of all active transfers,
 		 * rearm the timerfd with this transfer's timeout */
 		const struct itimerspec it = { {0, 0},
@@ -1455,7 +1455,7 @@ static int remove_from_flying_list(struct usbi_transfer *itransfer)
 	int r = 0;
 
 	usbi_mutex_lock(&ctx->flying_transfers_lock);
-	rearm_timerfd = (TIMESPEC_IS_SET(&itransfer->timeout) &&
+	rearm_timerfd = (USBI_TIMESPEC_IS_SET(&itransfer->timeout) &&
 		list_first_entry(&ctx->flying_transfers, struct usbi_transfer, list) == itransfer);
 	list_del(&itransfer->list);
 	if (usbi_using_timerfd(ctx) && rearm_timerfd)
@@ -1669,7 +1669,7 @@ int usbi_handle_transfer_completion(struct usbi_transfer *itransfer,
 			&& transfer->flags & LIBUSB_TRANSFER_SHORT_NOT_OK) {
 		int rqlen = transfer->length;
 		if (transfer->type == LIBUSB_TRANSFER_TYPE_CONTROL)
-			rqlen -= LIBUSB_CONTROL_SETUP_SIZE;
+			rqlen -= (int)LIBUSB_CONTROL_SETUP_SIZE;
 		if (rqlen != itransfer->transferred) {
 			usbi_dbg("interpreting short transfer as error");
 			status = LIBUSB_TRANSFER_ERROR;
@@ -2039,7 +2039,7 @@ static int handle_timeouts_locked(struct libusb_context *ctx)
 		struct timespec *cur_ts = &itransfer->timeout;
 
 		/* if we've reached transfers of infinite timeout, we're all done */
-		if (!TIMESPEC_IS_SET(cur_ts))
+		if (!USBI_TIMESPEC_IS_SET(cur_ts))
 			return 0;
 
 		/* ignore timeouts we've already handled */
@@ -2047,7 +2047,7 @@ static int handle_timeouts_locked(struct libusb_context *ctx)
 			continue;
 
 		/* if transfer has non-expired timeout, nothing more to do */
-		if (TIMESPEC_CMP(cur_ts, &systime, >))
+		if (USBI_TIMESPEC_CMP(cur_ts, &systime, >))
 			return 0;
 
 		/* otherwise, we've got an expired timeout to handle */
@@ -2169,13 +2169,13 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 	nfds = ctx->pollfds_cnt;
 	usbi_mutex_unlock(&ctx->event_data_lock);
 
-	timeout_ms = (int)(tv->tv_sec * 1000) + (tv->tv_usec / 1000);
+	timeout_ms = (int)((tv->tv_sec * 1000L) + (tv->tv_usec / 1000L));
 
 	/* round up to next millisecond */
 	if (tv->tv_usec % 1000)
 		timeout_ms++;
 
-	usbi_dbg("poll() %d fds with timeout in %dms", (int)nfds, timeout_ms);
+	usbi_dbg("poll() %u fds with timeout in %dms", UINT_CAST(nfds), timeout_ms);
 	r = usbi_poll(fds, nfds, timeout_ms);
 	usbi_dbg("poll() returned %d", r);
 	if (r == 0) {
@@ -2616,7 +2616,7 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 			continue;
 
 		/* if we've reached transfers of infinte timeout, we're done looking */
-		if (!TIMESPEC_IS_SET(&itransfer->timeout))
+		if (!USBI_TIMESPEC_IS_SET(&itransfer->timeout))
 			break;
 
 		next_timeout = itransfer->timeout;
@@ -2624,7 +2624,7 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 	}
 	usbi_mutex_unlock(&ctx->flying_transfers_lock);
 
-	if (!TIMESPEC_IS_SET(&next_timeout)) {
+	if (!USBI_TIMESPEC_IS_SET(&next_timeout)) {
 		usbi_dbg("no URB with timeout or all handled by OS; no timeout!");
 		return 0;
 	}
@@ -2635,12 +2635,12 @@ int API_EXPORTED libusb_get_next_timeout(libusb_context *ctx,
 		return 0;
 	}
 
-	if (!TIMESPEC_CMP(&systime, &next_timeout, <)) {
+	if (!USBI_TIMESPEC_CMP(&systime, &next_timeout, <)) {
 		usbi_dbg("first timeout already expired");
 		timerclear(tv);
 	} else {
-		TIMESPEC_SUB(&next_timeout, &systime, &next_timeout);
-		TIMESPEC_TO_TIMEVAL(tv, &next_timeout);
+		USBI_TIMESPEC_SUB(&next_timeout, &systime, &next_timeout);
+		USBI_TIMESPEC_TO_TIMEVAL(tv, &next_timeout);
 		usbi_dbg("next timeout in %ld.%06lds", (long)tv->tv_sec, (long)tv->tv_usec);
 	}
 
@@ -2766,7 +2766,7 @@ DEFAULT_VISIBILITY
 const struct libusb_pollfd ** LIBUSB_CALL libusb_get_pollfds(
 	libusb_context *ctx)
 {
-#ifndef _WIN32
+#if !(defined(_WIN32) || defined(__CYGWIN__))
 	struct libusb_pollfd **ret = NULL;
 	struct usbi_pollfd *ipollfd;
 	size_t i = 0;
@@ -2780,12 +2780,12 @@ const struct libusb_pollfd ** LIBUSB_CALL libusb_get_pollfds(
 		goto out;
 
 	list_for_each_entry(ipollfd, &ctx->ipollfds, list, struct usbi_pollfd)
-		ret[i++] = (struct libusb_pollfd *) ipollfd;
+		ret[i++] = (struct libusb_pollfd *)ipollfd;
 	ret[ctx->pollfds_cnt] = NULL;
 
 out:
 	usbi_mutex_unlock(&ctx->event_data_lock);
-	return (const struct libusb_pollfd **) ret;
+	return (const struct libusb_pollfd **)ret;
 #else
 	usbi_err(ctx, "external polling of libusb's internal descriptors "\
 		"is not yet supported on Windows platforms");
@@ -2818,7 +2818,7 @@ void usbi_handle_disconnect(struct libusb_device_handle *dev_handle)
 	struct usbi_transfer *cur;
 	struct usbi_transfer *to_cancel;
 
-	usbi_dbg("device %d.%d",
+	usbi_dbg("device %u.%u",
 		dev_handle->dev->bus_number, dev_handle->dev->device_address);
 
 	/* terminate all pending transfers with the LIBUSB_TRANSFER_NO_DEVICE

@@ -939,7 +939,7 @@ int API_EXPORTED libusb_get_port_numbers(libusb_device *dev,
 		dev = dev->parent_dev;
 	}
 	if (i < port_numbers_len)
-		memmove(port_numbers, &port_numbers[i], port_numbers_len - i);
+		memmove(port_numbers, &port_numbers[i], (size_t)(port_numbers_len - i));
 	return port_numbers_len - i;
 }
 
@@ -989,7 +989,7 @@ uint8_t API_EXPORTED libusb_get_device_address(libusb_device *dev)
  */
 int API_EXPORTED libusb_get_device_speed(libusb_device *dev)
 {
-	return dev->speed;
+	return (int)dev->speed;
 }
 
 static const struct libusb_endpoint_descriptor *find_endpoint(
@@ -1168,7 +1168,7 @@ void API_EXPORTED libusb_unref_device(libusb_device *dev)
 	usbi_mutex_unlock(&dev->lock);
 
 	if (refcnt == 0) {
-		usbi_dbg("destroy device %d.%d", dev->bus_number, dev->device_address);
+		usbi_dbg("destroy device %u.%u", dev->bus_number, dev->device_address);
 
 		libusb_unref_device(dev->parent_dev);
 
@@ -1317,7 +1317,7 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 	struct libusb_device_handle *_dev_handle;
 	size_t priv_size = usbi_backend.device_handle_priv_size;
 	int r;
-	usbi_dbg("open %d.%d", dev->bus_number, dev->device_address);
+	usbi_dbg("open %u.%u", dev->bus_number, dev->device_address);
 
 	if (!dev->attached) {
 		return LIBUSB_ERROR_NO_DEVICE;
@@ -1337,7 +1337,7 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 
 	r = usbi_backend.open(_dev_handle);
 	if (r < 0) {
-		usbi_dbg("open %d.%d returns %d", dev->bus_number, dev->device_address, r);
+		usbi_dbg("open %u.%u returns %d", dev->bus_number, dev->device_address, r);
 		libusb_unref_device(dev);
 		usbi_mutex_destroy(&_dev_handle->lock);
 		free(_dev_handle);
@@ -1637,7 +1637,7 @@ int API_EXPORTED libusb_set_configuration(libusb_device_handle *dev_handle,
 	int configuration)
 {
 	usbi_dbg("configuration %d", configuration);
-	if (configuration < -1 || configuration > UINT8_MAX)
+	if (configuration < -1 || configuration > (int)UINT8_MAX)
 		return LIBUSB_ERROR_INVALID_PARAM;
 	return usbi_backend.set_configuration(dev_handle, configuration);
 }
@@ -1683,12 +1683,12 @@ int API_EXPORTED libusb_claim_interface(libusb_device_handle *dev_handle,
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	usbi_mutex_lock(&dev_handle->lock);
-	if (dev_handle->claimed_interfaces & (1U << interface_number))
+	if (dev_handle->claimed_interfaces & (1UL << interface_number))
 		goto out;
 
 	r = usbi_backend.claim_interface(dev_handle, interface_number);
 	if (r == 0)
-		dev_handle->claimed_interfaces |= 1U << interface_number;
+		dev_handle->claimed_interfaces |= 1UL << interface_number;
 
 out:
 	usbi_mutex_unlock(&dev_handle->lock);
@@ -1724,14 +1724,14 @@ int API_EXPORTED libusb_release_interface(libusb_device_handle *dev_handle,
 		return LIBUSB_ERROR_INVALID_PARAM;
 
 	usbi_mutex_lock(&dev_handle->lock);
-	if (!(dev_handle->claimed_interfaces & (1U << interface_number))) {
+	if (!(dev_handle->claimed_interfaces & (1UL << interface_number))) {
 		r = LIBUSB_ERROR_NOT_FOUND;
 		goto out;
 	}
 
 	r = usbi_backend.release_interface(dev_handle, interface_number);
 	if (r == 0)
-		dev_handle->claimed_interfaces &= ~(1U << interface_number);
+		dev_handle->claimed_interfaces &= ~(1UL << interface_number);
 
 out:
 	usbi_mutex_unlock(&dev_handle->lock);
@@ -1766,7 +1766,7 @@ int API_EXPORTED libusb_set_interface_alt_setting(libusb_device_handle *dev_hand
 		interface_number, alternate_setting);
 	if (interface_number < 0 || interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
-	if (alternate_setting < 0 || alternate_setting > UINT8_MAX)
+	if (alternate_setting < 0 || alternate_setting > (int)UINT8_MAX)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
 	usbi_mutex_lock(&dev_handle->lock);
@@ -1775,7 +1775,7 @@ int API_EXPORTED libusb_set_interface_alt_setting(libusb_device_handle *dev_hand
 		return LIBUSB_ERROR_NO_DEVICE;
 	}
 
-	if (!(dev_handle->claimed_interfaces & (1U << interface_number))) {
+	if (!(dev_handle->claimed_interfaces & (1UL << interface_number))) {
 		usbi_mutex_unlock(&dev_handle->lock);
 		return LIBUSB_ERROR_NOT_FOUND;
 	}
@@ -1866,7 +1866,7 @@ int API_EXPORTED libusb_reset_device(libusb_device_handle *dev_handle)
 int API_EXPORTED libusb_alloc_streams(libusb_device_handle *dev_handle,
 	uint32_t num_streams, unsigned char *endpoints, int num_endpoints)
 {
-	usbi_dbg("streams %u eps %d", (unsigned)num_streams, num_endpoints);
+	usbi_dbg("streams %u eps %d", num_streams, num_endpoints);
 
 	if (!num_streams || !endpoints || num_endpoints <= 0)
 		return LIBUSB_ERROR_INVALID_PARAM;

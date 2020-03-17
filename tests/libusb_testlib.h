@@ -20,16 +20,11 @@
 #ifndef LIBUSB_TESTLIB_H
 #define LIBUSB_TESTLIB_H
 
+#include <stdbool.h>
 #include <stdio.h>
 
-#if !defined(bool)
-#define bool int
-#endif
-#if !defined(true)
-#define true (1 == 1)
-#endif
-#if !defined(false)
-#define false (!true)
+#ifdef _MSC_VER
+#define __attribute__(x)
 #endif
 
 /** Values returned from a test function to indicate test result */
@@ -62,8 +57,8 @@ typedef struct {
 /**
  * Logs some test information or state
  */
-void libusb_testlib_logf(libusb_testlib_ctx * ctx, 
-                          const char* fmt, ...);
+void libusb_testlib_logf(libusb_testlib_ctx * ctx, const char* fmt, ...)
+	__attribute__ ((__format__ (__printf__, 2, 3)));
 
 /**
  * Function pointer for a libusb test function.

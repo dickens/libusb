@@ -319,7 +319,7 @@ static int linux_netlink_read_message(void)
 
 	if (sa_nl.nl_groups != NL_GROUP_KERNEL || sa_nl.nl_pid != 0) {
 		usbi_dbg("ignoring netlink message from unknown group/PID (%u/%u)",
-			 (unsigned int)sa_nl.nl_groups, (unsigned int)sa_nl.nl_pid);
+			 UINT_CAST(sa_nl.nl_groups), UINT_CAST(sa_nl.nl_pid));
 		return -1;
 	}
 
@@ -331,7 +331,7 @@ static int linux_netlink_read_message(void)
 
 	cred = (struct ucred *)CMSG_DATA(cmsg);
 	if (cred->uid != 0) {
-		usbi_dbg("ignoring netlink message with non-zero sender UID %u", (unsigned int)cred->uid);
+		usbi_dbg("ignoring netlink message with non-zero sender UID %u", UINT_CAST(cred->uid));
 		return -1;
 	}
 

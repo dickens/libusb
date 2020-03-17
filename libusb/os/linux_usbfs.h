@@ -67,7 +67,7 @@ struct usbfs_getdriver {
 struct usbfs_iso_packet_desc {
 	unsigned int length;
 	unsigned int actual_length;
-	unsigned int status;
+	int status;	/* nonsensically unsigned in the UAPI header */
 };
 
 #define MAX_BULK_BUFFER_LENGTH		16384

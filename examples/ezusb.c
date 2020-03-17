@@ -30,7 +30,7 @@
 #include "ezusb.h"
 
 extern void logerror(const char *format, ...)
-	__attribute__ ((format(printf, 1, 2)));
+	__attribute__ ((__format__ (__printf__, 1, 2)));
 
 /*
  * This file contains functions for uploading firmware into Cypress
@@ -131,9 +131,9 @@ static int ezusb_write(libusb_device_handle *device, const char *label,
 		logerror("%s, addr 0x%08x len %4u (0x%04x)\n", label, addr, (unsigned)len, (unsigned)len);
 	status = libusb_control_transfer(device,
 		LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
-		opcode, addr & 0xFFFF, addr >> 16,
-		(unsigned char*)data, (uint16_t)len, 1000);
-	if (status != (signed)len) {
+		opcode, (uint16_t)(addr & 0xFFFFU), (uint16_t)(addr >> 16),
+		(unsigned char *)data, (uint16_t)len, 1000);
+	if (status != (int)len) {
 		if (status < 0)
 			logerror("%s: %s\n", label, libusb_error_name(status));
 		else
@@ -154,9 +154,9 @@ static int ezusb_read(libusb_device_handle *device, const char *label,
 		logerror("%s, addr 0x%08x len %4u (0x%04x)\n", label, addr, (unsigned)len, (unsigned)len);
 	status = libusb_control_transfer(device,
 		LIBUSB_ENDPOINT_IN | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
-		opcode, addr & 0xFFFF, addr >> 16,
-		(unsigned char*)data, (uint16_t)len, 1000);
-	if (status != (signed)len) {
+		opcode, (uint16_t)(addr & 0xFFFFU), (uint16_t)(addr >> 16),
+		(unsigned char *)data, (uint16_t)len, 1000);
+	if (status != (int)len) {
 		if (status < 0)
 			logerror("%s: %s\n", label, libusb_error_name(status));
 		else
@@ -178,7 +178,7 @@ static bool ezusb_cpucs(libusb_device_handle *device, uint32_t addr, bool doRun)
 		logerror("%s\n", data ? "stop CPU" : "reset CPU");
 	status = libusb_control_transfer(device,
 		LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
-		RW_INTERNAL, addr & 0xFFFF, addr >> 16,
+		RW_INTERNAL, (uint16_t)(addr & 0xFFFFU), (uint16_t)(addr >> 16),
 		&data, 1, 1000);
 	if ((status != 1) &&
 		/* We may get an I/O error from libusb as the device disappears */
@@ -206,7 +206,7 @@ static bool ezusb_fx3_jump(libusb_device_handle *device, uint32_t addr)
 		logerror("transfer execution to Program Entry at 0x%08x\n", addr);
 	status = libusb_control_transfer(device,
 		LIBUSB_ENDPOINT_OUT | LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE,
-		RW_INTERNAL, addr & 0xFFFF, addr >> 16,
+		RW_INTERNAL, (uint16_t)(addr & 0xFFFFU), (uint16_t)(addr >> 16),
 		NULL, 0, 1000);
 	/* We may get an I/O error from libusb as the device disappears */
 	if ((status != 0) && (status != LIBUSB_ERROR_IO))
@@ -322,7 +322,7 @@ static int parse_ihex(FILE *image, void *context,
 		}
 
 		if (type != 0) {
-			logerror("unsupported record type: %u\n", type);
+			logerror("unsupported record type: %d\n", type);
 			return -3;
 		}
 
@@ -455,8 +455,8 @@ static int parse_iic(FILE *image, void *context,
 			logerror("unable to read IIC block header\n");
 			return -1;
 		}
-		data_len = (block_header[0] << 8) + block_header[1];
-		data_addr = (block_header[2] << 8) + block_header[3];
+		data_len = ((size_t)block_header[0] << 8) + block_header[1];
+		data_addr = ((uint32_t)block_header[2] << 8) + block_header[3];
 		if (data_len > sizeof(data)) {
 			/* If this is ever reported as an error, switch to using malloc/realloc */
 			logerror("IIC data block too small - please report this error to libusb.info\n");
@@ -817,8 +817,8 @@ int ezusb_load_ram(libusb_device_handle *device, const char *path, int fx_type, 
 	}
 
 	if (verbose && (ctx.count != 0)) {
-		logerror("... WROTE: %d bytes, %d segments, avg %d\n",
-			(int)ctx.total, (int)ctx.count, (int)(ctx.total/ctx.count));
+		logerror("... WROTE: %lu bytes, %lu segments, avg %lu\n",
+			(unsigned long)ctx.total, (unsigned long)ctx.count, (unsigned long)(ctx.total/ctx.count));
 	}
 
 	/* if required, reset the CPU so it runs what we just uploaded */

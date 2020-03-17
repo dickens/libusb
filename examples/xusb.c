@@ -29,6 +29,7 @@
 #include "libusb.h"
 
 #if defined(_MSC_VER)
+#define __attribute__(x)
 #define snprintf _snprintf
 #define putenv _putenv
 #endif
@@ -46,14 +47,15 @@ static const char* binary_name = NULL;
 static inline void msleep(int msecs)
 {
 #if defined(_WIN32)
-	Sleep(msecs);
+	Sleep((DWORD)msecs);
 #else
 	const struct timespec ts = { msecs / 1000, (msecs % 1000) * 1000000L };
 	nanosleep(&ts, NULL);
 #endif
 }
 
-static void perr(char const *format, ...)
+static __attribute__ ((__format__ (__printf__, 1, 2)))
+void perr(char const *format, ...)
 {
 	va_list args;
 
@@ -66,31 +68,31 @@ static void perr(char const *format, ...)
 #define CALL_CHECK(fcall) do { int _r=fcall; if (_r < 0) ERR_EXIT(_r); } while (0)
 #define CALL_CHECK_CLOSE(fcall, hdl) do { int _r=fcall; if (_r < 0) { libusb_close(hdl); ERR_EXIT(_r); } } while (0)
 #define B(x) (((x)!=0)?1:0)
-#define be_to_int32(buf) (((buf)[0]<<24)|((buf)[1]<<16)|((buf)[2]<<8)|(buf)[3])
+#define be_to_int32(buf) (((uint32_t)((buf)[0])<<24)|((uint32_t)((buf)[1])<<16)|((uint32_t)((buf)[2])<<8)|(uint32_t)((buf)[3]))
 
 #define RETRY_MAX                     5
-#define REQUEST_SENSE_LENGTH          0x12
-#define INQUIRY_LENGTH                0x24
-#define READ_CAPACITY_LENGTH          0x08
+#define REQUEST_SENSE_LENGTH          0x12U
+#define INQUIRY_LENGTH                0x24U
+#define READ_CAPACITY_LENGTH          0x08U
 
 // HID Class-Specific Requests values. See section 7.2 of the HID specifications
-#define HID_GET_REPORT                0x01
-#define HID_GET_IDLE                  0x02
-#define HID_GET_PROTOCOL              0x03
-#define HID_SET_REPORT                0x09
-#define HID_SET_IDLE                  0x0A
-#define HID_SET_PROTOCOL              0x0B
-#define HID_REPORT_TYPE_INPUT         0x01
-#define HID_REPORT_TYPE_OUTPUT        0x02
-#define HID_REPORT_TYPE_FEATURE       0x03
+#define HID_GET_REPORT                0x01U
+#define HID_GET_IDLE                  0x02U
+#define HID_GET_PROTOCOL              0x03U
+#define HID_SET_REPORT                0x09U
+#define HID_SET_IDLE                  0x0AU
+#define HID_SET_PROTOCOL              0x0BU
+#define HID_REPORT_TYPE_INPUT         0x01U
+#define HID_REPORT_TYPE_OUTPUT        0x02U
+#define HID_REPORT_TYPE_FEATURE       0x03U
 
 // Mass Storage Requests values. See section 3 of the Bulk-Only Mass Storage Class specifications
-#define BOMS_RESET                    0xFF
-#define BOMS_GET_MAX_LUN              0xFE
+#define BOMS_RESET                    0xFFU
+#define BOMS_GET_MAX_LUN              0xFEU
 
 // Microsoft OS Descriptor
-#define MS_OS_DESC_STRING_INDEX		0xEE
-#define MS_OS_DESC_STRING_LENGTH	0x12
+#define MS_OS_DESC_STRING_INDEX		0xEEU
+#define MS_OS_DESC_STRING_LENGTH	0x12U
 #define MS_OS_DESC_VENDOR_CODE_OFFSET	0x10
 static const uint8_t ms_os_desc_string[] = {
 	MS_OS_DESC_STRING_LENGTH,
@@ -189,7 +191,7 @@ static char* uuid_to_string(const uint8_t* uuid)
 // removed by Sony
 static int display_ps3_status(libusb_device_handle *handle)
 {
-	uint8_t input_report[49];
+	int8_t input_report[49];
 	uint8_t master_bt_address[8];
 	uint8_t device_bt_address[18];
 
@@ -208,8 +210,8 @@ static int display_ps3_status(libusb_device_handle *handle)
 	// Get the status of the controller's buttons via its HID report
 	printf("\nReading PS3 Input Report...\n");
 	CALL_CHECK(libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-		HID_GET_REPORT, (HID_REPORT_TYPE_INPUT<<8)|0x01, 0, input_report, sizeof(input_report), 1000));
-	switch(input_report[2]){	/** Direction pad plus start, select, and joystick buttons */
+		HID_GET_REPORT, (HID_REPORT_TYPE_INPUT<<8)|0x01, 0, (unsigned char *)input_report, sizeof(input_report), 1000));
+	switch((uint8_t)input_report[2]) {	/** Direction pad plus start, select, and joystick buttons */
 		case 0x01:
 			printf("\tSELECT pressed\n");
 			break;
@@ -235,7 +237,7 @@ static int display_ps3_status(libusb_device_handle *handle)
 			printf("\tLEFT pressed\n");
 			break;
 	}
-	switch(input_report[3]){	/** Shapes plus top right and left buttons */
+	switch((uint8_t)input_report[3]) {	/** Shapes plus top right and left buttons */
 		case 0x01:
 			printf("\tLEFT 2 pressed\n");
 			break;
@@ -268,10 +270,8 @@ static int display_ps3_status(libusb_device_handle *handle)
 	printf("\tL1 Value: %d\tR1 Value: %d\n", input_report[20], input_report[21]);
 	printf("\tRoll (x axis): %d Yaw (y axis): %d Pitch (z axis) %d\n",
 			//(((input_report[42] + 128) % 256) - 128),
-			(int8_t)(input_report[42]),
-			(int8_t)(input_report[44]),
-			(int8_t)(input_report[46]));
-	printf("\tAcceleration: %d\n\n", (int8_t)(input_report[48]));
+			input_report[42], input_report[44], input_report[46]);
+	printf("\tAcceleration: %d\n\n", input_report[48]);
 	return 0;
 }
 // The XBOX Controller is really a HID device that got its HID Report Descriptors
@@ -279,21 +279,21 @@ static int display_ps3_status(libusb_device_handle *handle)
 // Input/Output reports described at http://euc.jp/periphs/xbox-controller.ja.html
 static int display_xbox_status(libusb_device_handle *handle)
 {
-	uint8_t input_report[20];
+	int8_t input_report[20];
 	printf("\nReading XBox Input Report...\n");
 	CALL_CHECK(libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-		HID_GET_REPORT, (HID_REPORT_TYPE_INPUT<<8)|0x00, 0, input_report, 20, 1000));
-	printf("   D-pad: %02X\n", input_report[2]&0x0F);
+		HID_GET_REPORT, HID_REPORT_TYPE_INPUT<<8, 0, (unsigned char *)input_report, sizeof(input_report), 1000));
+	printf("   D-pad: %02X\n", (unsigned int)(input_report[2]&0x0F));
 	printf("   Start:%d, Back:%d, Left Stick Press:%d, Right Stick Press:%d\n", B(input_report[2]&0x10), B(input_report[2]&0x20),
 		B(input_report[2]&0x40), B(input_report[2]&0x80));
 	// A, B, X, Y, Black, White are pressure sensitive
 	printf("   A:%d, B:%d, X:%d, Y:%d, White:%d, Black:%d\n", input_report[4], input_report[5],
 		input_report[6], input_report[7], input_report[9], input_report[8]);
 	printf("   Left Trigger: %d, Right Trigger: %d\n", input_report[10], input_report[11]);
-	printf("   Left Analog (X,Y): (%d,%d)\n", (int16_t)((input_report[13]<<8)|input_report[12]),
-		(int16_t)((input_report[15]<<8)|input_report[14]));
-	printf("   Right Analog (X,Y): (%d,%d)\n", (int16_t)((input_report[17]<<8)|input_report[16]),
-		(int16_t)((input_report[19]<<8)|input_report[18]));
+	printf("   Left Analog (X,Y): (%d,%d)\n", (input_report[13]<<8)|input_report[12],
+		(input_report[15]<<8)|input_report[14]);
+	printf("   Right Analog (X,Y): (%d,%d)\n", (input_report[17]<<8)|input_report[16],
+		(input_report[19]<<8)|input_report[18]);
 	return 0;
 }
 
@@ -309,12 +309,12 @@ static int set_xbox_actuators(libusb_device_handle *handle, uint8_t left, uint8_
 	output_report[5] = right;
 
 	CALL_CHECK(libusb_control_transfer(handle, LIBUSB_ENDPOINT_OUT|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-		HID_SET_REPORT, (HID_REPORT_TYPE_OUTPUT<<8)|0x00, 0, output_report, 06, 1000));
+		HID_SET_REPORT, HID_REPORT_TYPE_OUTPUT<<8, 0, output_report, sizeof(output_report), 1000));
 	return 0;
 }
 
 static int send_mass_storage_command(libusb_device_handle *handle, uint8_t endpoint, uint8_t lun,
-	uint8_t *cdb, uint8_t direction, int data_length, uint32_t *ret_tag)
+	uint8_t *cdb, uint8_t direction, uint32_t data_length, uint32_t *ret_tag)
 {
 	static uint32_t tag = 1;
 	uint8_t cdb_len;
@@ -332,7 +332,7 @@ static int send_mass_storage_command(libusb_device_handle *handle, uint8_t endpo
 
 	cdb_len = cdb_length[cdb[0]];
 	if ((cdb_len == 0) || (cdb_len > sizeof(cbw.CBWCB))) {
-		perr("send_mass_storage_command: don't know how to handle this command (%02X, length %d)\n",
+		perr("send_mass_storage_command: don't know how to handle this command (%02X, length %u)\n",
 			cdb[0], cdb_len);
 		return -1;
 	}
@@ -354,7 +354,7 @@ static int send_mass_storage_command(libusb_device_handle *handle, uint8_t endpo
 	i = 0;
 	do {
 		// The transfer length must always be exactly 31 bytes.
-		r = libusb_bulk_transfer(handle, endpoint, (unsigned char*)&cbw, 31, &size, 1000);
+		r = libusb_bulk_transfer(handle, endpoint, (unsigned char *)&cbw, 31, &size, 1000);
 		if (r == LIBUSB_ERROR_PIPE) {
 			libusb_clear_halt(handle, endpoint);
 		}
@@ -365,7 +365,7 @@ static int send_mass_storage_command(libusb_device_handle *handle, uint8_t endpo
 		return -1;
 	}
 
-	printf("   sent %d CDB bytes\n", cdb_len);
+	printf("   sent %u CDB bytes\n", cdb_len);
 	return 0;
 }
 
@@ -378,7 +378,7 @@ static int get_mass_storage_status(libusb_device_handle *handle, uint8_t endpoin
 	// clear the stall and try again.
 	i = 0;
 	do {
-		r = libusb_bulk_transfer(handle, endpoint, (unsigned char*)&csw, 13, &size, 1000);
+		r = libusb_bulk_transfer(handle, endpoint, (unsigned char *)&csw, 13, &size, 1000);
 		if (r == LIBUSB_ERROR_PIPE) {
 			libusb_clear_halt(handle, endpoint);
 		}
@@ -432,9 +432,8 @@ static void get_sense(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t
 	cdb[4] = REQUEST_SENSE_LENGTH;
 
 	send_mass_storage_command(handle, endpoint_out, 0, cdb, LIBUSB_ENDPOINT_IN, REQUEST_SENSE_LENGTH, &expected_tag);
-	rc = libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&sense, REQUEST_SENSE_LENGTH, &size, 1000);
-	if (rc < 0)
-	{
+	rc = libusb_bulk_transfer(handle, endpoint_in, sense, REQUEST_SENSE_LENGTH, &size, 1000);
+	if (rc < 0) {
 		printf("libusb_bulk_transfer failed: %s\n", libusb_error_name(rc));
 		return;
 	}
@@ -443,7 +442,7 @@ static void get_sense(libusb_device_handle *handle, uint8_t endpoint_in, uint8_t
 	if ((sense[0] != 0x70) && (sense[0] != 0x71)) {
 		perr("   ERROR No sense data\n");
 	} else {
-		perr("   ERROR Sense: %02X %02X %02X\n", sense[2]&0x0F, sense[12], sense[13]);
+		perr("   ERROR Sense: %02X %02X %02X\n", sense[2]&0x0FU, sense[12], sense[13]);
 	}
 	// Strictly speaking, the get_mass_storage_status() call should come
 	// before these perr() lines.  If the status is nonzero then we must
@@ -467,7 +466,7 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 
 	printf("Reading Max LUN:\n");
 	r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-		BOMS_GET_MAX_LUN, 0, 0, &lun, 1, 1000);
+		BOMS_GET_MAX_LUN, 0, 0, &lun, sizeof(lun), 1000);
 	// Some devices send a STALL instead of the actual value.
 	// In such cases we should set lun to 0.
 	if (r == 0) {
@@ -475,7 +474,7 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	} else if (r < 0) {
 		perr("   Failed: %s", libusb_strerror((enum libusb_error)r));
 	}
-	printf("   Max LUN = %d\n", lun);
+	printf("   Max LUN = %u\n", lun);
 
 	// Send Inquiry
 	printf("Sending Inquiry:\n");
@@ -485,17 +484,17 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	cdb[4] = INQUIRY_LENGTH;
 
 	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, INQUIRY_LENGTH, &expected_tag);
-	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, INQUIRY_LENGTH, &size, 1000));
+	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, buffer, INQUIRY_LENGTH, &size, 1000));
 	printf("   received %d bytes\n", size);
 	// The following strings are not zero terminated
 	for (i=0; i<8; i++) {
-		vid[i] = buffer[8+i];
-		pid[i] = buffer[16+i];
-		rev[i/2] = buffer[32+i/2];	// instead of another loop
+		vid[i] = (char)buffer[8+i];
+		pid[i] = (char)buffer[16+i];
+		rev[i/2] = (char)buffer[32+i/2];	// instead of another loop
 	}
-	vid[8] = 0;
-	pid[8] = 0;
-	rev[4] = 0;
+	vid[8] = '\0';
+	pid[8] = '\0';
+	rev[4] = '\0';
 	printf("   VID:PID:REV \"%8s\":\"%8s\":\"%4s\"\n", vid, pid, rev);
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
@@ -508,7 +507,7 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	cdb[0] = 0x25;	// Read Capacity
 
 	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, READ_CAPACITY_LENGTH, &expected_tag);
-	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, (unsigned char*)&buffer, READ_CAPACITY_LENGTH, &size, 1000));
+	CALL_CHECK(libusb_bulk_transfer(handle, endpoint_in, buffer, READ_CAPACITY_LENGTH, &size, 1000));
 	printf("   received %d bytes\n", size);
 	max_lba = be_to_int32(&buffer[0]);
 	block_size = be_to_int32(&buffer[4]);
@@ -519,7 +518,7 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	}
 
 	// coverity[tainted_data]
-	data = (unsigned char*) calloc(1, block_size);
+	data = calloc(1, (size_t)block_size);
 	if (data == NULL) {
 		perr("   unable to allocate data buffer\n");
 		return -1;
@@ -533,14 +532,14 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 	cdb[8] = 0x01;	// 1 block
 
 	send_mass_storage_command(handle, endpoint_out, lun, cdb, LIBUSB_ENDPOINT_IN, block_size, &expected_tag);
-	libusb_bulk_transfer(handle, endpoint_in, data, block_size, &size, 5000);
+	libusb_bulk_transfer(handle, endpoint_in, data, (int)block_size, &size, 5000);
 	printf("   READ: received %d bytes\n", size);
 	if (get_mass_storage_status(handle, endpoint_in, expected_tag) == -2) {
 		get_sense(handle, endpoint_in, endpoint_out);
 	} else {
-		display_buffer_hex(data, size);
+		display_buffer_hex(data, (unsigned)size);
 		if ((binary_dump) && ((fd = fopen(binary_name, "w")) != NULL)) {
-			if (fwrite(data, 1, (size_t)size, fd) != (unsigned int)size) {
+			if (fwrite(data, 1, (size_t)size, fd) != (size_t)size) {
 				perr("   unable to write binary data\n");
 			}
 			fclose(fd);
@@ -552,27 +551,27 @@ static int test_mass_storage(libusb_device_handle *handle, uint8_t endpoint_in, 
 }
 
 // HID
-static int get_hid_record_size(uint8_t *hid_report_descriptor, int size, int type)
+static int get_hid_record_size(uint8_t *hid_report_descriptor, unsigned int size, uint8_t type)
 {
-	uint8_t i, j = 0;
-	uint8_t offset;
+	unsigned int i, j = 0;
+	unsigned int offset;
 	int record_size[3] = {0, 0, 0};
 	int nb_bits = 0, nb_items = 0;
 	bool found_record_marker;
 
 	found_record_marker = false;
-	for (i = hid_report_descriptor[0]+1; i < size; i += offset) {
-		offset = (hid_report_descriptor[i]&0x03) + 1;
+	for (i = hid_report_descriptor[0]+1U; i < size; i += offset) {
+		offset = (hid_report_descriptor[i]&0x03U) + 1;
 		if (offset == 4)
 			offset = 5;
-		switch (hid_report_descriptor[i] & 0xFC) {
+		switch (hid_report_descriptor[i] & 0xFCU) {
 		case 0x74:	// bitsize
 			nb_bits = hid_report_descriptor[i+1];
 			break;
 		case 0x94:	// count
 			nb_items = 0;
 			for (j=1; j<offset; j++) {
-				nb_items = ((uint32_t)hid_report_descriptor[i+j]) << (8*(j-1));
+				nb_items = (int)hid_report_descriptor[i+j] << (8*(j-1));
 			}
 			break;
 		case 0x80:	// input
@@ -583,7 +582,7 @@ static int get_hid_record_size(uint8_t *hid_report_descriptor, int size, int typ
 			found_record_marker = true;
 			j = 1;
 			break;
-		case 0xb0:	// feature
+		case 0xB0:	// feature
 			found_record_marker = true;
 			j = 2;
 			break;
@@ -620,28 +619,28 @@ static int test_hid(libusb_device_handle *handle, uint8_t endpoint_in)
 		printf("   Failed\n");
 		return -1;
 	}
-	display_buffer_hex(hid_report_descriptor, descriptor_size);
+	display_buffer_hex(hid_report_descriptor, (unsigned)descriptor_size);
 	if ((binary_dump) && ((fd = fopen(binary_name, "w")) != NULL)) {
-		if (fwrite(hid_report_descriptor, 1, descriptor_size, fd) != (size_t)descriptor_size) {
+		if (fwrite(hid_report_descriptor, 1, (size_t)descriptor_size, fd) != (size_t)descriptor_size) {
 			printf("   Error writing descriptor to file\n");
 		}
 		fclose(fd);
 	}
 
-	size = get_hid_record_size(hid_report_descriptor, descriptor_size, HID_REPORT_TYPE_FEATURE);
+	size = get_hid_record_size(hid_report_descriptor, (unsigned int)descriptor_size, HID_REPORT_TYPE_FEATURE);
 	if (size <= 0) {
 		printf("\nSkipping Feature Report readout (None detected)\n");
 	} else {
-		report_buffer = (uint8_t*) calloc(size, 1);
+		report_buffer = calloc(1, (size_t)size);
 		if (report_buffer == NULL) {
 			return -1;
 		}
 
 		printf("\nReading Feature Report (length %d)...\n", size);
 		r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-			HID_GET_REPORT, (HID_REPORT_TYPE_FEATURE<<8)|0, 0, report_buffer, (uint16_t)size, 5000);
+			HID_GET_REPORT, HID_REPORT_TYPE_FEATURE<<8, 0, report_buffer, (uint16_t)size, 5000);
 		if (r >= 0) {
-			display_buffer_hex(report_buffer, size);
+			display_buffer_hex(report_buffer, (unsigned)size);
 		} else {
 			switch(r) {
 			case LIBUSB_ERROR_NOT_FOUND:
@@ -659,20 +658,20 @@ static int test_hid(libusb_device_handle *handle, uint8_t endpoint_in)
 		free(report_buffer);
 	}
 
-	size = get_hid_record_size(hid_report_descriptor, descriptor_size, HID_REPORT_TYPE_INPUT);
+	size = get_hid_record_size(hid_report_descriptor, (unsigned int)descriptor_size, HID_REPORT_TYPE_INPUT);
 	if (size <= 0) {
 		printf("\nSkipping Input Report readout (None detected)\n");
 	} else {
-		report_buffer = (uint8_t*) calloc(size, 1);
+		report_buffer = calloc(1, (size_t)size);
 		if (report_buffer == NULL) {
 			return -1;
 		}
 
 		printf("\nReading Input Report (length %d)...\n", size);
 		r = libusb_control_transfer(handle, LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_CLASS|LIBUSB_RECIPIENT_INTERFACE,
-			HID_GET_REPORT, (HID_REPORT_TYPE_INPUT<<8)|0x00, 0, report_buffer, (uint16_t)size, 5000);
+			HID_GET_REPORT, HID_REPORT_TYPE_INPUT<<8, 0, report_buffer, (uint16_t)size, 5000);
 		if (r >= 0) {
-			display_buffer_hex(report_buffer, size);
+			display_buffer_hex(report_buffer, (unsigned)size);
 		} else {
 			switch(r) {
 			case LIBUSB_ERROR_TIMEOUT:
@@ -692,7 +691,7 @@ static int test_hid(libusb_device_handle *handle, uint8_t endpoint_in)
 		printf("\nTesting interrupt read using endpoint %02X...\n", endpoint_in);
 		r = libusb_interrupt_transfer(handle, endpoint_in, report_buffer, size, &size, 5000);
 		if (r >= 0) {
-			display_buffer_hex(report_buffer, size);
+			display_buffer_hex(report_buffer, (unsigned)size);
 		} else {
 			printf("   %s\n", libusb_strerror((enum libusb_error)r));
 		}
@@ -728,29 +727,29 @@ static void read_ms_winsub_feature_descriptors(libusb_device_handle *handle, uin
 		os_fd[1].recipient = LIBUSB_RECIPIENT_DEVICE;
 
 	for (i=0; i<2; i++) {
-		printf("\nReading %s OS Feature Descriptor (wIndex = 0x%04d):\n", os_fd[i].desc, os_fd[i].index);
+		printf("\nReading %s OS Feature Descriptor (wIndex = 0x%04x):\n", os_fd[i].desc, os_fd[i].index);
 
 		// Read the header part
 		r = libusb_control_transfer(handle, (uint8_t)(LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_VENDOR|os_fd[i].recipient),
-			bRequest, (uint16_t)(((iface_number)<< 8)|0x00), os_fd[i].index, os_desc, os_fd[i].header_size, 1000);
+			bRequest, (uint16_t)(iface_number<<8), os_fd[i].index, os_desc, os_fd[i].header_size, 1000);
 		if (r < os_fd[i].header_size) {
 			perr("   Failed: %s", (r<0)?libusb_strerror((enum libusb_error)r):"header size is too small");
 			return;
 		}
-		le_type_punning_IS_fine = (void*)os_desc;
-		length = *((uint32_t*)le_type_punning_IS_fine);
+		le_type_punning_IS_fine = (void *)os_desc;
+		length = *((uint32_t *)le_type_punning_IS_fine);
 		if (length > MAX_OS_FD_LENGTH) {
 			length = MAX_OS_FD_LENGTH;
 		}
 
 		// Read the full feature descriptor
 		r = libusb_control_transfer(handle, (uint8_t)(LIBUSB_ENDPOINT_IN|LIBUSB_REQUEST_TYPE_VENDOR|os_fd[i].recipient),
-			bRequest, (uint16_t)(((iface_number)<< 8)|0x00), os_fd[i].index, os_desc, (uint16_t)length, 1000);
+			bRequest, (uint16_t)(iface_number<< 8), os_fd[i].index, os_desc, (uint16_t)length, 1000);
 		if (r < 0) {
 			perr("   Failed: %s", libusb_strerror((enum libusb_error)r));
 			return;
 		} else {
-			display_buffer_hex(os_desc, r);
+			display_buffer_hex(os_desc, (unsigned)r);
 		}
 	}
 }
@@ -825,10 +824,10 @@ static int test_device(uint16_t vid, uint16_t pid)
 		r = libusb_get_port_numbers(dev, port_path, sizeof(port_path));
 		if (r > 0) {
 			printf("\nDevice properties:\n");
-			printf("        bus number: %d\n", bus);
-			printf("         port path: %d", port_path[0]);
+			printf("        bus number: %u\n", bus);
+			printf("         port path: %u", port_path[0]);
 			for (i=1; i<r; i++) {
-				printf("->%d", port_path[i]);
+				printf("->%u", port_path[i]);
 			}
 			printf(" (from root hub)\n");
 		}
@@ -839,13 +838,13 @@ static int test_device(uint16_t vid, uint16_t pid)
 
 	printf("\nReading device descriptor:\n");
 	CALL_CHECK_CLOSE(libusb_get_device_descriptor(dev, &dev_desc), handle);
-	printf("            length: %d\n", dev_desc.bLength);
-	printf("      device class: %d\n", dev_desc.bDeviceClass);
-	printf("               S/N: %d\n", dev_desc.iSerialNumber);
+	printf("            length: %u\n", dev_desc.bLength);
+	printf("      device class: %u\n", dev_desc.bDeviceClass);
+	printf("               S/N: %u\n", dev_desc.iSerialNumber);
 	printf("           VID:PID: %04X:%04X\n", dev_desc.idVendor, dev_desc.idProduct);
 	printf("         bcdDevice: %04X\n", dev_desc.bcdDevice);
-	printf("   iMan:iProd:iSer: %d:%d:%d\n", dev_desc.iManufacturer, dev_desc.iProduct, dev_desc.iSerialNumber);
-	printf("          nb confs: %d\n", dev_desc.bNumConfigurations);
+	printf("   iMan:iProd:iSer: %u:%u:%u\n", dev_desc.iManufacturer, dev_desc.iProduct, dev_desc.iSerialNumber);
+	printf("          nb confs: %u\n", dev_desc.bNumConfigurations);
 	// Copy the string descriptors for easier parsing
 	string_index[0] = dev_desc.iManufacturer;
 	string_index[1] = dev_desc.iProduct;
@@ -853,7 +852,7 @@ static int test_device(uint16_t vid, uint16_t pid)
 
 	printf("\nReading BOS descriptor: ");
 	if (libusb_get_bos_descriptor(handle, &bos_desc) == LIBUSB_SUCCESS) {
-		printf("%d caps\n", bos_desc->bNumDeviceCaps);
+		printf("%u caps\n", bos_desc->bNumDeviceCaps);
 		for (i = 0; i < bos_desc->bNumDeviceCaps; i++)
 			print_device_cap(bos_desc->dev_capability[i]);
 		libusb_free_bos_descriptor(bos_desc);
@@ -868,10 +867,10 @@ static int test_device(uint16_t vid, uint16_t pid)
 	if (nb_ifaces > 0)
 		first_iface = conf_desc->usb_interface[0].altsetting[0].bInterfaceNumber;
 	for (i=0; i<nb_ifaces; i++) {
-		printf("              interface[%d]: id = %d\n", i,
+		printf("              interface[%d]: id = %u\n", i,
 			conf_desc->usb_interface[i].altsetting[0].bInterfaceNumber);
 		for (j=0; j<conf_desc->usb_interface[i].num_altsetting; j++) {
-			printf("interface[%d].altsetting[%d]: num endpoints = %d\n",
+			printf("interface[%d].altsetting[%d]: num endpoints = %u\n",
 				i, j, conf_desc->usb_interface[i].altsetting[j].bNumEndpoints);
 			printf("   Class.SubClass.Protocol: %02X.%02X.%02X\n",
 				conf_desc->usb_interface[i].altsetting[j].bInterfaceClass,
@@ -926,16 +925,16 @@ static int test_device(uint16_t vid, uint16_t pid)
 		if (string_index[i] == 0) {
 			continue;
 		}
-		if (libusb_get_string_descriptor_ascii(handle, string_index[i], (unsigned char*)string, sizeof(string)) > 0) {
+		if (libusb_get_string_descriptor_ascii(handle, string_index[i], (unsigned char *)string, sizeof(string)) > 0) {
 			printf("   String (0x%02X): \"%s\"\n", string_index[i], string);
 		}
 	}
 	// Read the OS String Descriptor
-	r = libusb_get_string_descriptor(handle, MS_OS_DESC_STRING_INDEX, 0, (unsigned char*)string, MS_OS_DESC_STRING_LENGTH);
+	r = libusb_get_string_descriptor(handle, MS_OS_DESC_STRING_INDEX, 0, (unsigned char *)string, MS_OS_DESC_STRING_LENGTH);
 	if (r == MS_OS_DESC_STRING_LENGTH && memcmp(ms_os_desc_string, string, sizeof(ms_os_desc_string)) == 0) {
 		// If this is a Microsoft OS String Descriptor,
 		// attempt to read the WinUSB extended Feature Descriptors
-		read_ms_winsub_feature_descriptors(handle, string[MS_OS_DESC_VENDOR_CODE_OFFSET], first_iface);
+		read_ms_winsub_feature_descriptors(handle, (uint8_t)string[MS_OS_DESC_VENDOR_CODE_OFFSET], first_iface);
 	}
 
 	switch(test_mode) {
@@ -986,7 +985,7 @@ int main(int argc, char** argv)
 	PID = 0;
 	test_mode = USE_GENERIC;
 
-	if (((uint8_t*)&endian_test)[0] == 0xBE) {
+	if (((uint8_t *)&endian_test)[0] == 0xBE) {
 		printf("Despite their natural superiority for end users, big endian\n"
 			"CPUs are not supported with this program, sorry.\n");
 		return 0;
@@ -1104,7 +1103,7 @@ int main(int argc, char** argv)
 	}
 
 	version = libusb_get_version();
-	printf("Using libusb v%d.%d.%d.%d\n\n", version->major, version->minor, version->micro, version->nano);
+	printf("Using libusb v%u.%u.%u.%u\n\n", version->major, version->minor, version->micro, version->nano);
 	r = libusb_init(NULL);
 	if (r < 0)
 		return r;

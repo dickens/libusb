@@ -146,7 +146,7 @@ void libusb_testlib_logf(libusb_testlib_ctx * ctx,
 	va_start(va, fmt);
 	vfprintf(ctx->output_file, fmt, va);
 	va_end(va);
-	fprintf(ctx->output_file, "\n");
+	fputc('\n', ctx->output_file);
 	fflush(ctx->output_file);
 }
 
@@ -212,12 +212,12 @@ int libusb_testlib_run_tests(int argc,
 	/* Setup test log output */
 	r = setup_test_output(&ctx);
 	if (r != 0)
-		return r;  
+		return r;
 
 	/* Act on any options not related to running tests */
 	if (ctx.list_tests) {
 		while (tests[idx].function != NULL) {
-			libusb_testlib_logf(&ctx, tests[idx].name);
+			libusb_testlib_logf(&ctx, "%s", tests[idx].name);
 			++idx;
 		}
 		cleanup_test_output(&ctx);
@@ -246,7 +246,7 @@ int libusb_testlib_run_tests(int argc,
 		test_result = test->function(&ctx);
 		libusb_testlib_logf(&ctx,
 			"%s (%d)",
-			test_result_to_str(test_result), test_result);
+			test_result_to_str(test_result), (int)test_result);
 		switch (test_result) {
 		case TEST_STATUS_SUCCESS: pass_count++; break;
 		case TEST_STATUS_FAILURE: fail_count++; break;

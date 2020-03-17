@@ -30,23 +30,6 @@
 
 #include <stdbool.h>
 
-/*
- * Workaround for the mess that exists with the DWORD and ULONG types.
- * Visual Studio unconditionally defines these types as 'unsigned long'
- * and a long is always 32-bits, even on 64-bit builds. GCC on the other
- * hand varies the width of a long, matching it to the build. To make
- * matters worse, the platform headers for these GCC builds define a
- * DWORD/ULONG to be 'unsigned long' on 32-bit builds and 'unsigned int'
- * on 64-bit builds. This creates a great deal of warnings for compilers
- * that support printf format checking since it will never actually be
- * an unsigned long.
- */
-#if defined(_MSC_VER)
-#define ULONG_CAST(x)	(x)
-#else
-#define ULONG_CAST(x)	((unsigned long)(x))
-#endif
-
 #if defined(__CYGWIN__ )
 #define _stricmp strcasecmp
 #define _strdup strdup
@@ -99,20 +82,15 @@
 #define DLL_DECLARE_FUNC_PREFIXED(api, ret, prefix, name, args)		\
 	DLL_DECLARE_FUNC_PREFIXNAME(api, ret, prefix##name, name, args)
 
+#define DLL_GET_FUNC_ADDR(h, name)					\
+	((void (*)(void))GetProcAddress((h), (name)))
+
 #define DLL_LOAD_FUNC_PREFIXNAME(dll, prefixname, name, ret_on_failure)	\
 	do {								\
-		HMODULE h = DLL_HANDLE_NAME(dll);			\
-		prefixname = (DLL_FUNC_NAME(name))GetProcAddress(h,	\
-				DLL_STRINGIFY(name));			\
-		if (prefixname)						\
-			break;						\
-		prefixname = (DLL_FUNC_NAME(name))GetProcAddress(h,	\
-				DLL_STRINGIFY(name) DLL_STRINGIFY(A));	\
-		if (prefixname)						\
-			break;						\
-		prefixname = (DLL_FUNC_NAME(name))GetProcAddress(h,	\
-				DLL_STRINGIFY(name) DLL_STRINGIFY(W));	\
-		if (prefixname)						\
+		prefixname = (DLL_FUNC_NAME(name))			\
+			DLL_GET_FUNC_ADDR(DLL_HANDLE_NAME(dll),		\
+					  DLL_STRINGIFY(name));		\
+		if (prefixname != NULL)					\
 			break;						\
 		if (ret_on_failure)					\
 			return false;					\
@@ -244,7 +222,7 @@ struct winusb_device_priv {
 		char *path; // each interface needs a device interface path,
 		const struct windows_usb_api_backend *apib; // an API backend (multiple drivers support),
 		int sub_api;
-		int8_t nb_endpoints; // and a set of endpoint addresses (USB_MAXENDPOINTS)
+		uint8_t nb_endpoints; // and a set of endpoint addresses (USB_MAXENDPOINTS)
 		uint8_t *endpoint;
 		int current_altsetting;
 		bool restricted_functionality;  // indicates if the interface functionality is restricted
@@ -261,7 +239,6 @@ struct usbdk_device_handle_priv {
 };
 
 struct winusb_device_handle_priv {
-	int active_interface;
 	struct {
 		HANDLE dev_handle; // WinUSB needs an extra handle for the file
 		HANDLE api_handle; // used by the API to communicate with the device

@@ -56,9 +56,9 @@ struct file_descriptor {
 
 static usbi_mutex_static_t fd_table_lock = USBI_MUTEX_INITIALIZER;
 
-#define BITS_PER_BYTE			8
-#define BITMAP_BITS_PER_WORD		(sizeof(unsigned long) * BITS_PER_BYTE)
-#define FD_TABLE_INCR_SIZE		64
+#define BITS_PER_BYTE			8U
+#define BITMAP_BITS_PER_WORD		((unsigned int)(sizeof(unsigned long) * (size_t)BITS_PER_BYTE))
+#define FD_TABLE_INCR_SIZE		64U
 
 static struct file_descriptor **fd_table;
 static unsigned long *fd_table_bitmap;
@@ -87,11 +87,11 @@ static struct file_descriptor *alloc_fd(enum fd_type type, LONG refcount)
 	return fd;
 }
 
-static struct file_descriptor *get_fd(unsigned int _fd, bool ref)
+static struct file_descriptor *get_fd(int _fd, bool ref)
 {
 	struct file_descriptor *fd = NULL;
 
-	if (_fd < fd_table_size)
+	if ((unsigned int)_fd < fd_table_size)
 		fd = fd_table[_fd];
 	if (fd != NULL && ref)
 		InterlockedIncrement(&fd->refcount);
@@ -134,16 +134,16 @@ static int install_fd(struct file_descriptor *fd)
 
 	for (n = 0; n < fd_table_size; n += BITMAP_BITS_PER_WORD) {
 		unsigned int idx = n / BITMAP_BITS_PER_WORD;
-		ULONG mask, pos = 0U;
+		ULONG mask, pos = 0;
 		unsigned char nonzero;
 
 		mask = ~fd_table_bitmap[idx];
-		if (mask == 0U)
+		if (mask == 0)
 			continue;
 
 		nonzero = _BitScanForward(&pos, mask);
 		assert(nonzero);
-		fd_table_bitmap[idx] |= 1U << pos;
+		fd_table_bitmap[idx] |= 1UL << pos;
 		n += pos;
 		break;
 	}
@@ -153,11 +153,13 @@ static int install_fd(struct file_descriptor *fd)
 	fd_table[n] = fd;
 	fd_count++;
 
-	return n;
+	return (int)n;
 }
 
-static void remove_fd(unsigned int pos)
+static void remove_fd(int fd)
 {
+	unsigned int pos = (unsigned int)fd;
+
 	assert(fd_table[pos] != NULL);
 	fd_table[pos] = NULL;
 	fd_table_bitmap[pos / BITMAP_BITS_PER_WORD] &= ~(1U << (pos % BITMAP_BITS_PER_WORD));
@@ -256,8 +258,8 @@ static DWORD poll_wait(const HANDLE *wait_handles, DWORD num_wait_handles, DWORD
 	if (notify_event == NULL)
 		return WAIT_FAILED;
 
-	num_threads = 1 + (num_wait_handles - MAXIMUM_WAIT_OBJECTS - 1) / (MAXIMUM_WAIT_OBJECTS - 1);
-	thread_data = malloc(num_threads * sizeof(*thread_data));
+	num_threads = 1 + ((int)num_wait_handles - MAXIMUM_WAIT_OBJECTS - 1) / (MAXIMUM_WAIT_OBJECTS - 1);
+	thread_data = malloc((size_t)num_threads * sizeof(*thread_data));
 	if (thread_data == NULL) {
 		CloseHandle(notify_event);
 		SetLastError(ERROR_OUTOFMEMORY);

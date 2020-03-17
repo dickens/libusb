@@ -159,7 +159,7 @@ struct darwin_cached_device {
   UInt64                parent_session;
   UInt64                session;
   USBDeviceAddress      address;
-  char                  sys_path[21];
+  char                  sys_path[20];
   usb_device_t        **device;
   int                   open_count;
   UInt8                 first_config, active_config, port;  

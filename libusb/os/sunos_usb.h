@@ -66,8 +66,8 @@ struct devlink_cbarg {
 };
 
 typedef struct walk_link {
-	char *path;
-	int len;
+	const char *path;
+	size_t len;
 	char **linkpp;
 } walk_link_t;
 

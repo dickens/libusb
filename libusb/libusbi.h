@@ -67,6 +67,12 @@
 #define PTR_ALIGN(v) \
 	(((v) + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1))
 
+/* Macros to coerce a value to a specific type.
+ * Mainly useful for printing values in logging functions whose type can vary
+ * across different compilers/platforms.  */
+#define UINT_CAST(val)	((unsigned int)(val))
+#define ULONG_CAST(val)	((unsigned long)(val))
+
 /* Internal abstraction for poll */
 #if defined(POLL_POSIX)
 #include "os/poll_posix.h"
@@ -206,13 +212,13 @@ static inline void *usbi_reallocf(void *ptr, size_t size)
 	return ret;
 }
 
-#define TIMESPEC_IS_SET(ts)	((ts)->tv_sec || (ts)->tv_nsec)
-#define TIMESPEC_CLEAR(ts)	(ts)->tv_sec = (ts)->tv_nsec = 0
-#define TIMESPEC_CMP(a, b, CMP)						\
+#define USBI_TIMESPEC_IS_SET(ts)	((ts)->tv_sec || (ts)->tv_nsec)
+#define USBI_TIMESPEC_CLEAR(ts)		(ts)->tv_sec = (ts)->tv_nsec = 0
+#define USBI_TIMESPEC_CMP(a, b, CMP)					\
 	(((a)->tv_sec == (b)->tv_sec)					\
 	 ? ((a)->tv_nsec CMP (b)->tv_nsec)				\
 	 : ((a)->tv_sec CMP (b)->tv_sec))
-#define TIMESPEC_SUB(a, b, result)					\
+#define USBI_TIMESPEC_SUB(a, b, result)					\
 	do {								\
 		(result)->tv_sec = (a)->tv_sec - (b)->tv_sec;		\
 		(result)->tv_nsec = (a)->tv_nsec - (b)->tv_nsec;	\
@@ -222,20 +228,21 @@ static inline void *usbi_reallocf(void *ptr, size_t size)
 		}							\
 	} while (0)
 
-#if defined(_WIN32)
+#if defined(_MSC_VER)
 #define TIMEVAL_TV_SEC_TYPE	long
 #else
 #define TIMEVAL_TV_SEC_TYPE	time_t
 #endif
 
-/* Some platforms don't have this define */
-#ifndef TIMESPEC_TO_TIMEVAL
-#define TIMESPEC_TO_TIMEVAL(tv, ts)					\
+/* Some platforms have TIMESPEC_TO_TIMEVAL, but it is possible that
+ * the types of timeval::tv_usec and timespec::tv_nsec differ, leading
+ * to compiler warnings.  To avoid this, we define our own version
+ * that casts the types appropriately to avoid such warnings. */
+#define USBI_TIMESPEC_TO_TIMEVAL(tv, ts)				\
 	do {								\
-		(tv)->tv_sec = (TIMEVAL_TV_SEC_TYPE) (ts)->tv_sec;	\
-		(tv)->tv_usec = (ts)->tv_nsec / 1000L;			\
+		(tv)->tv_sec = (TIMEVAL_TV_SEC_TYPE)((ts)->tv_sec);	\
+		(tv)->tv_usec = (int)((ts)->tv_nsec) / 1000;		\
 	} while (0)
-#endif
 
 #ifdef ENABLE_LOGGING
 
@@ -375,16 +382,17 @@ static inline struct libusb_context *usbi_get_context(struct libusb_context *ctx
 	return ctx ? ctx : usbi_default_context;
 }
 
-enum usbi_event_flags {
-	/* The list of pollfds has been modified */
-	USBI_EVENT_POLLFDS_MODIFIED = 1U << 0,
+/* Flags for libusb_context::event_flags */
 
-	/* The user has interrupted the event handler */
-	USBI_EVENT_USER_INTERRUPT = 1U << 1,
+/* The list of pollfds has been modified */
+#define USBI_EVENT_POLLFDS_MODIFIED		(1U << 0)
 
-	/* A hotplug callback deregistration is pending */
-	USBI_EVENT_HOTPLUG_CB_DEREGISTERED = 1U << 2,
-};
+/* The user has interrupted the event handler */
+#define USBI_EVENT_USER_INTERRUPT		(1U << 1)
+
+/* A hotplug callback deregistration is pending */
+#define USBI_EVENT_HOTPLUG_CB_DEREGISTERED	(1U << 2)
+
 
 /* Macros for managing event handling state */
 static inline int usbi_handling_events(struct libusb_context *ctx)
@@ -505,27 +513,27 @@ struct usbi_transfer {
 	void *priv;
 };
 
-enum usbi_transfer_state_flags {
-	/* Transfer successfully submitted by backend */
-	USBI_TRANSFER_IN_FLIGHT = 1U << 0,
+/* Flags for usbi_transfer::state_flags */
 
-	/* Cancellation was requested via libusb_cancel_transfer() */
-	USBI_TRANSFER_CANCELLING = 1U << 1,
+/* Transfer successfully submitted by backend */
+#define USBI_TRANSFER_IN_FLIGHT			(1U << 0)
 
-	/* Operation on the transfer failed because the device disappeared */
-	USBI_TRANSFER_DEVICE_DISAPPEARED = 1U << 2,
-};
+/* Cancellation was requested via libusb_cancel_transfer() */
+#define USBI_TRANSFER_CANCELLING		(1U << 1)
 
-enum usbi_transfer_timeout_flags {
-	/* Set by backend submit_transfer() if the OS handles timeout */
-	USBI_TRANSFER_OS_HANDLES_TIMEOUT = 1U << 0,
+/* Operation on the transfer failed because the device disappeared */
+#define USBI_TRANSFER_DEVICE_DISAPPEARED	(1U << 2)
 
-	/* The transfer timeout has been handled */
-	USBI_TRANSFER_TIMEOUT_HANDLED = 1U << 1,
+/* Flags for usbi_transfer::timeout_flags */
 
-	/* The transfer timeout was successfully processed */
-	USBI_TRANSFER_TIMED_OUT = 1U << 2,
-};
+/* Set by backend submit_transfer() if the OS handles timeout */
+#define USBI_TRANSFER_OS_HANDLES_TIMEOUT	(1U << 0)
+
+/* The transfer timeout has been handled */
+#define USBI_TRANSFER_TIMEOUT_HANDLED		(1U << 1)
+
+/* The transfer timeout was successfully processed */
+#define USBI_TRANSFER_TIMED_OUT			(1U << 2)
 
 #define USBI_TRANSFER_TO_LIBUSB_TRANSFER(itransfer)	\
 	((struct libusb_transfer *)			\

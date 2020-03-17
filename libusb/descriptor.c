@@ -89,7 +89,7 @@ int usbi_parse_descriptor(const unsigned char *source, const char *descriptor,
 
 static void clear_endpoint(struct libusb_endpoint_descriptor *endpoint)
 {
-	free((void *) endpoint->extra);
+	free((void *)endpoint->extra);
 }
 
 static int parse_endpoint(struct libusb_context *ctx,
@@ -110,12 +110,12 @@ static int parse_endpoint(struct libusb_context *ctx,
 
 	usbi_parse_descriptor(buffer, "bb", &header, 0);
 	if (header.bDescriptorType != LIBUSB_DT_ENDPOINT) {
-		usbi_err(ctx, "unexpected descriptor %x (expected %x)",
-			header.bDescriptorType, LIBUSB_DT_ENDPOINT);
+		usbi_err(ctx, "unexpected descriptor 0x%x (expected 0x%x)",
+			header.bDescriptorType, UINT_CAST(LIBUSB_DT_ENDPOINT));
 		return parsed;
 	}
 	if (header.bLength > size) {
-		usbi_warn(ctx, "short endpoint descriptor read %d/%d",
+		usbi_warn(ctx, "short endpoint descriptor read %d/%u",
 			  size, header.bLength);
 		return parsed;
 	}
@@ -124,7 +124,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 	else if (header.bLength >= ENDPOINT_DESC_LENGTH)
 		usbi_parse_descriptor(buffer, "bbbbwb", endpoint, host_endian);
 	else {
-		usbi_err(ctx, "invalid endpoint bLength (%d)", header.bLength);
+		usbi_err(ctx, "invalid endpoint bLength (%u)", header.bLength);
 		return LIBUSB_ERROR_IO;
 	}
 
@@ -138,11 +138,11 @@ static int parse_endpoint(struct libusb_context *ctx,
 	while (size >= DESC_HEADER_LENGTH) {
 		usbi_parse_descriptor(buffer, "bb", &header, 0);
 		if (header.bLength < DESC_HEADER_LENGTH) {
-			usbi_err(ctx, "invalid extra ep desc len (%d)",
+			usbi_err(ctx, "invalid extra ep desc len (%u)",
 				 header.bLength);
 			return LIBUSB_ERROR_IO;
 		} else if (header.bLength > size) {
-			usbi_warn(ctx, "short extra ep desc read %d/%d",
+			usbi_warn(ctx, "short extra ep desc read %d/%u",
 				  size, header.bLength);
 			return parsed;
 		}
@@ -154,7 +154,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 				(header.bDescriptorType == LIBUSB_DT_DEVICE))
 			break;
 
-		usbi_dbg("skipping descriptor %x", header.bDescriptorType);
+		usbi_dbg("skipping descriptor 0x%x", header.bDescriptorType);
 		buffer += header.bLength;
 		size -= header.bLength;
 		parsed += header.bLength;
@@ -176,7 +176,7 @@ static int parse_endpoint(struct libusb_context *ctx,
 		return LIBUSB_ERROR_NO_MEM;
 	}
 
-	memcpy(extra, begin, len);
+	memcpy(extra, begin, (size_t)len);
 	endpoint->extra_length = len;
 
 	return parsed;
@@ -192,16 +192,16 @@ static void clear_interface(struct libusb_interface *usb_interface)
 			struct libusb_interface_descriptor *ifp =
 				(struct libusb_interface_descriptor *)
 				usb_interface->altsetting + i;
-			free((void *) ifp->extra);
+			free((void *)ifp->extra);
 			if (ifp->endpoint) {
 				for (j = 0; j < ifp->bNumEndpoints; j++)
 					clear_endpoint((struct libusb_endpoint_descriptor *)
 						       ifp->endpoint + j);
 			}
-			free((void *) ifp->endpoint);
+			free((void *)ifp->endpoint);
 		}
 	}
-	free((void *) usb_interface->altsetting);
+	free((void *)usb_interface->altsetting);
 	usb_interface->altsetting = NULL;
 }
 
@@ -222,7 +222,7 @@ static int parse_interface(libusb_context *ctx,
 
 	while (size >= INTERFACE_DESC_LENGTH) {
 		struct libusb_interface_descriptor *altsetting =
-			(struct libusb_interface_descriptor *) usb_interface->altsetting;
+			(struct libusb_interface_descriptor *)usb_interface->altsetting;
 		altsetting = usbi_reallocf(altsetting,
 			sizeof(struct libusb_interface_descriptor) *
 			((size_t)usb_interface->num_altsetting + 1));
@@ -235,23 +235,23 @@ static int parse_interface(libusb_context *ctx,
 		ifp = altsetting + usb_interface->num_altsetting;
 		usbi_parse_descriptor(buffer, "bbbbbbbbb", ifp, 0);
 		if (ifp->bDescriptorType != LIBUSB_DT_INTERFACE) {
-			usbi_err(ctx, "unexpected descriptor %x (expected %x)",
-				 ifp->bDescriptorType, LIBUSB_DT_INTERFACE);
+			usbi_err(ctx, "unexpected descriptor 0x%x (expected 0x%x)",
+				 ifp->bDescriptorType, UINT_CAST(LIBUSB_DT_INTERFACE));
 			return parsed;
 		}
 		if (ifp->bLength < INTERFACE_DESC_LENGTH) {
-			usbi_err(ctx, "invalid interface bLength (%d)",
+			usbi_err(ctx, "invalid interface bLength (%u)",
 				 ifp->bLength);
 			r = LIBUSB_ERROR_IO;
 			goto err;
 		}
 		if (ifp->bLength > size) {
-			usbi_warn(ctx, "short intf descriptor read %d/%d",
+			usbi_warn(ctx, "short intf descriptor read %d/%u",
 				 size, ifp->bLength);
 			return parsed;
 		}
 		if (ifp->bNumEndpoints > USB_MAXENDPOINTS) {
-			usbi_err(ctx, "too many endpoints (%d)", ifp->bNumEndpoints);
+			usbi_err(ctx, "too many endpoints (%u)", ifp->bNumEndpoints);
 			r = LIBUSB_ERROR_IO;
 			goto err;
 		}
@@ -276,13 +276,13 @@ static int parse_interface(libusb_context *ctx,
 			usbi_parse_descriptor(buffer, "bb", &header, 0);
 			if (header.bLength < DESC_HEADER_LENGTH) {
 				usbi_err(ctx,
-					 "invalid extra intf desc len (%d)",
+					 "invalid extra intf desc len (%u)",
 					 header.bLength);
 				r = LIBUSB_ERROR_IO;
 				goto err;
 			} else if (header.bLength > size) {
 				usbi_warn(ctx,
-					  "short extra intf desc read %d/%d",
+					  "short extra intf desc read %d/%u",
 					  size, header.bLength);
 				return parsed;
 			}
@@ -308,7 +308,7 @@ static int parse_interface(libusb_context *ctx,
 				r = LIBUSB_ERROR_NO_MEM;
 				goto err;
 			}
-			memcpy((unsigned char *) ifp->extra, begin, len);
+			memcpy((void *)ifp->extra, begin, (size_t)len);
 			ifp->extra_length = len;
 		}
 
@@ -338,7 +338,7 @@ static int parse_interface(libusb_context *ctx,
 		}
 
 		/* We check to see if it's an alternate to this one */
-		ifp = (struct libusb_interface_descriptor *) buffer;
+		ifp = (struct libusb_interface_descriptor *)buffer;
 		if (size < LIBUSB_DT_INTERFACE_SIZE ||
 				ifp->bDescriptorType != LIBUSB_DT_INTERFACE ||
 				ifp->bInterfaceNumber != interface_number)
@@ -359,8 +359,8 @@ static void clear_configuration(struct libusb_config_descriptor *config)
 			clear_interface((struct libusb_interface *)
 					config->interface + i);
 	}
-	free((void *) config->interface);
-	free((void *) config->extra);
+	free((void *)config->interface);
+	free((void *)config->extra);
 }
 
 static int parse_configuration(struct libusb_context *ctx,
@@ -380,21 +380,21 @@ static int parse_configuration(struct libusb_context *ctx,
 
 	usbi_parse_descriptor(buffer, "bbwbbbbb", config, host_endian);
 	if (config->bDescriptorType != LIBUSB_DT_CONFIG) {
-		usbi_err(ctx, "unexpected descriptor %x (expected %x)",
-			 config->bDescriptorType, LIBUSB_DT_CONFIG);
+		usbi_err(ctx, "unexpected descriptor 0x%x (expected 0x%x)",
+			 config->bDescriptorType, UINT_CAST(LIBUSB_DT_CONFIG));
 		return LIBUSB_ERROR_IO;
 	}
 	if (config->bLength < LIBUSB_DT_CONFIG_SIZE) {
-		usbi_err(ctx, "invalid config bLength (%d)", config->bLength);
+		usbi_err(ctx, "invalid config bLength (%u)", config->bLength);
 		return LIBUSB_ERROR_IO;
 	}
 	if (config->bLength > size) {
-		usbi_err(ctx, "short config descriptor read %d/%d",
+		usbi_err(ctx, "short config descriptor read %d/%u",
 			 size, config->bLength);
 		return LIBUSB_ERROR_IO;
 	}
 	if (config->bNumInterfaces > USB_MAXINTERFACES) {
-		usbi_err(ctx, "too many interfaces (%d)", config->bNumInterfaces);
+		usbi_err(ctx, "too many interfaces (%u)", config->bNumInterfaces);
 		return LIBUSB_ERROR_IO;
 	}
 
@@ -421,13 +421,13 @@ static int parse_configuration(struct libusb_context *ctx,
 
 			if (header.bLength < DESC_HEADER_LENGTH) {
 				usbi_err(ctx,
-					 "invalid extra config desc len (%d)",
+					 "invalid extra config desc len (%u)",
 					 header.bLength);
 				r = LIBUSB_ERROR_IO;
 				goto err;
 			} else if (header.bLength > size) {
 				usbi_warn(ctx,
-					  "short extra config desc read %d/%d",
+					  "short extra config desc read %d/%u",
 					  size, header.bLength);
 				config->bNumInterfaces = (uint8_t)i;
 				return size;
@@ -457,7 +457,7 @@ static int parse_configuration(struct libusb_context *ctx,
 					goto err;
 				}
 
-				memcpy((unsigned char *) config->extra, begin, len);
+				memcpy((void *)config->extra, begin, (size_t)len);
 				config->extra_length = len;
 			}
 		}
@@ -539,8 +539,7 @@ int API_EXPORTED libusb_get_device_descriptor(libusb_device *dev,
 	struct libusb_device_descriptor *desc)
 {
 	usbi_dbg(" ");
-	memcpy((unsigned char *) desc, (unsigned char *) &dev->device_descriptor,
-	       sizeof (dev->device_descriptor));
+	memcpy(desc, &dev->device_descriptor, sizeof(dev->device_descriptor));
 	return 0;
 }
 
@@ -616,7 +615,7 @@ int API_EXPORTED libusb_get_config_descriptor(libusb_device *dev,
 	int host_endian = 0;
 	int r;
 
-	usbi_dbg("index %d", config_index);
+	usbi_dbg("index %u", config_index);
 	if (config_index >= dev->device_descriptor.bNumConfigurations)
 		return LIBUSB_ERROR_NOT_FOUND;
 
@@ -654,7 +653,7 @@ int usbi_get_config_index_by_value(struct libusb_device *dev,
 {
 	uint8_t i;
 
-	usbi_dbg("value %d", bConfigurationValue);
+	usbi_dbg("value %u", bConfigurationValue);
 	for (i = 0; i < dev->device_descriptor.bNumConfigurations; i++) {
 		unsigned char tmp[6];
 		int host_endian;
@@ -711,7 +710,7 @@ int API_EXPORTED libusb_get_config_descriptor_by_value(libusb_device *dev,
 	else if (idx == -1)
 		return LIBUSB_ERROR_NOT_FOUND;
 	else
-		return libusb_get_config_descriptor(dev, (uint8_t) idx, config);
+		return libusb_get_config_descriptor(dev, (uint8_t)idx, config);
 }
 
 /** \ingroup libusb_desc
@@ -759,7 +758,7 @@ int API_EXPORTED libusb_get_ss_endpoint_companion_descriptor(
 	while (size >= DESC_HEADER_LENGTH) {
 		usbi_parse_descriptor(buffer, "bb", &header, 0);
 		if (header.bLength < 2 || header.bLength > size) {
-			usbi_err(ctx, "invalid descriptor length %d",
+			usbi_err(ctx, "invalid descriptor length %u",
 				 header.bLength);
 			return LIBUSB_ERROR_IO;
 		}
@@ -769,7 +768,7 @@ int API_EXPORTED libusb_get_ss_endpoint_companion_descriptor(
 			continue;
 		}
 		if (header.bLength < LIBUSB_DT_SS_ENDPOINT_COMPANION_SIZE) {
-			usbi_err(ctx, "invalid ss-ep-comp-desc length %d",
+			usbi_err(ctx, "invalid ss-ep-comp-desc length %u",
 				 header.bLength);
 			return LIBUSB_ERROR_IO;
 		}
@@ -812,16 +811,16 @@ static int parse_bos(struct libusb_context *ctx,
 
 	usbi_parse_descriptor(buffer, "bbwb", &bos_header, host_endian);
 	if (bos_header.bDescriptorType != LIBUSB_DT_BOS) {
-		usbi_err(ctx, "unexpected descriptor %x (expected %x)",
-			 bos_header.bDescriptorType, LIBUSB_DT_BOS);
+		usbi_err(ctx, "unexpected descriptor 0x%x (expected 0x%x)",
+			 bos_header.bDescriptorType, UINT_CAST(LIBUSB_DT_BOS));
 		return LIBUSB_ERROR_IO;
 	}
 	if (bos_header.bLength < LIBUSB_DT_BOS_SIZE) {
-		usbi_err(ctx, "invalid bos bLength (%d)", bos_header.bLength);
+		usbi_err(ctx, "invalid bos bLength (%u)", bos_header.bLength);
 		return LIBUSB_ERROR_IO;
 	}
 	if (bos_header.bLength > size) {
-		usbi_err(ctx, "short bos descriptor read %d/%d",
+		usbi_err(ctx, "short bos descriptor read %d/%u",
 			 size, bos_header.bLength);
 		return LIBUSB_ERROR_IO;
 	}
@@ -844,18 +843,18 @@ static int parse_bos(struct libusb_context *ctx,
 		}
 		usbi_parse_descriptor(buffer, "bbb", &dev_cap, host_endian);
 		if (dev_cap.bDescriptorType != LIBUSB_DT_DEVICE_CAPABILITY) {
-			usbi_warn(ctx, "unexpected descriptor %x (expected %x)",
-				  dev_cap.bDescriptorType, LIBUSB_DT_DEVICE_CAPABILITY);
+			usbi_warn(ctx, "unexpected descriptor 0x%x (expected 0x%x)",
+				  dev_cap.bDescriptorType, UINT_CAST(LIBUSB_DT_DEVICE_CAPABILITY));
 			break;
 		}
 		if (dev_cap.bLength < LIBUSB_DT_DEVICE_CAPABILITY_SIZE) {
-			usbi_err(ctx, "invalid dev-cap bLength (%d)",
+			usbi_err(ctx, "invalid dev-cap bLength (%u)",
 				 dev_cap.bLength);
 			libusb_free_bos_descriptor(_bos);
 			return LIBUSB_ERROR_IO;
 		}
 		if (dev_cap.bLength > size) {
-			usbi_warn(ctx, "short dev-cap descriptor read %d/%d",
+			usbi_warn(ctx, "short dev-cap descriptor read %d/%u",
 				  size, dev_cap.bLength);
 			break;
 		}
@@ -911,7 +910,7 @@ int API_EXPORTED libusb_get_bos_descriptor(libusb_device_handle *dev_handle,
 	}
 
 	usbi_parse_descriptor(bos_header, "bbwb", &_bos, host_endian);
-	usbi_dbg("found BOS descriptor: size %d bytes, %d capabilities",
+	usbi_dbg("found BOS descriptor: size %u bytes, %u capabilities",
 		 _bos.wTotalLength, _bos.bNumDeviceCaps);
 	bos_data = calloc(_bos.wTotalLength, 1);
 	if (bos_data == NULL)
@@ -969,13 +968,13 @@ int API_EXPORTED libusb_get_usb_2_0_extension_descriptor(
 	const int host_endian = 0;
 
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_USB_2_0_EXTENSION) {
-		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
+		usbi_err(ctx, "unexpected bDevCapabilityType 0x%x (expected 0x%x)",
 			 dev_cap->bDevCapabilityType,
-			 LIBUSB_BT_USB_2_0_EXTENSION);
+			 UINT_CAST(LIBUSB_BT_USB_2_0_EXTENSION));
 		return LIBUSB_ERROR_INVALID_PARAM;
 	}
 	if (dev_cap->bLength < LIBUSB_BT_USB_2_0_EXTENSION_SIZE) {
-		usbi_err(ctx, "short dev-cap descriptor read %d/%d",
+		usbi_err(ctx, "short dev-cap descriptor read %u/%d",
 			 dev_cap->bLength, LIBUSB_BT_USB_2_0_EXTENSION_SIZE);
 		return LIBUSB_ERROR_IO;
 	}
@@ -1027,13 +1026,13 @@ int API_EXPORTED libusb_get_ss_usb_device_capability_descriptor(
 	const int host_endian = 0;
 
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_SS_USB_DEVICE_CAPABILITY) {
-		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
+		usbi_err(ctx, "unexpected bDevCapabilityType 0x%x (expected 0x%x)",
 			 dev_cap->bDevCapabilityType,
-			 LIBUSB_BT_SS_USB_DEVICE_CAPABILITY);
+			 UINT_CAST(LIBUSB_BT_SS_USB_DEVICE_CAPABILITY));
 		return LIBUSB_ERROR_INVALID_PARAM;
 	}
 	if (dev_cap->bLength < LIBUSB_BT_SS_USB_DEVICE_CAPABILITY_SIZE) {
-		usbi_err(ctx, "short dev-cap descriptor read %d/%d",
+		usbi_err(ctx, "short dev-cap descriptor read %u/%d",
 			 dev_cap->bLength, LIBUSB_BT_SS_USB_DEVICE_CAPABILITY_SIZE);
 		return LIBUSB_ERROR_IO;
 	}
@@ -1085,13 +1084,13 @@ int API_EXPORTED libusb_get_container_id_descriptor(struct libusb_context *ctx,
 	const int host_endian = 0;
 
 	if (dev_cap->bDevCapabilityType != LIBUSB_BT_CONTAINER_ID) {
-		usbi_err(ctx, "unexpected bDevCapabilityType %x (expected %x)",
+		usbi_err(ctx, "unexpected bDevCapabilityType 0x%x (expected 0x%x)",
 			 dev_cap->bDevCapabilityType,
-			 LIBUSB_BT_CONTAINER_ID);
+			 UINT_CAST(LIBUSB_BT_CONTAINER_ID));
 		return LIBUSB_ERROR_INVALID_PARAM;
 	}
 	if (dev_cap->bLength < LIBUSB_BT_CONTAINER_ID_SIZE) {
-		usbi_err(ctx, "short dev-cap descriptor read %d/%d",
+		usbi_err(ctx, "short dev-cap descriptor read %u/%d",
 			 dev_cap->bLength, LIBUSB_BT_CONTAINER_ID_SIZE);
 		return LIBUSB_ERROR_IO;
 	}

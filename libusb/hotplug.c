@@ -107,7 +107,7 @@ int hotplug_callback(struct libusb_context *ctx, struct libusb_device *dev,
       dev_handle = NULL;
     }
   } else {
-    printf("Unhandled event %d\n", event);
+    printf("Unhandled event %d\n", (int)event);
   }
   count++;
 
@@ -142,6 +142,13 @@ int main (void) {
 }
 \endcode
  */
+
+#define VALID_HOTPLUG_EVENTS_MASK ((unsigned int)		\
+	(unsigned int)LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED |	\
+	(unsigned int)LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT)
+
+#define VALID_HOTPLUG_FLAGS_MASK ((unsigned int)		\
+	(unsigned int)LIBUSB_HOTPLUG_ENUMERATE)
 
 static int usbi_hotplug_match_cb(struct libusb_context *ctx,
 	struct libusb_device *dev, libusb_hotplug_event event,
@@ -227,10 +234,12 @@ int API_EXPORTED libusb_hotplug_register_callback(libusb_context *ctx,
 	libusb_hotplug_callback_handle *callback_handle)
 {
 	struct libusb_hotplug_callback *new_callback;
+	unsigned int _events = (unsigned int)events;
+	unsigned int _flags = (unsigned int)flags;
 
 	/* check for sane values */
-	if ((!events || (~(LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) & events)) ||
-	    (flags && (~LIBUSB_HOTPLUG_ENUMERATE & flags)) ||
+	if ((!_events || (~VALID_HOTPLUG_EVENTS_MASK & _events)) ||
+	    (~VALID_HOTPLUG_FLAGS_MASK & _flags) ||
 	    (LIBUSB_HOTPLUG_MATCH_ANY != vendor_id && (~0xffff & vendor_id)) ||
 	    (LIBUSB_HOTPLUG_MATCH_ANY != product_id && (~0xffff & product_id)) ||
 	    (LIBUSB_HOTPLUG_MATCH_ANY != dev_class && (~0xff & dev_class)) ||
@@ -250,7 +259,7 @@ int API_EXPORTED libusb_hotplug_register_callback(libusb_context *ctx,
 		return LIBUSB_ERROR_NO_MEM;
 	}
 
-	new_callback->flags = (uint8_t)events;
+	new_callback->flags = _events;
 	if (LIBUSB_HOTPLUG_MATCH_ANY != vendor_id) {
 		new_callback->flags |= USBI_HOTPLUG_VENDOR_ID_VALID;
 		new_callback->vendor_id = (uint16_t)vendor_id;
@@ -281,14 +290,13 @@ int API_EXPORTED libusb_hotplug_register_callback(libusb_context *ctx,
 
 	usbi_dbg("new hotplug cb %p with handle %d", new_callback, new_callback->handle);
 
-	if ((flags & LIBUSB_HOTPLUG_ENUMERATE) && (events & LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED)) {
+	if ((_flags & LIBUSB_HOTPLUG_ENUMERATE) && (_events & LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED)) {
 		ssize_t i, len;
 		struct libusb_device **devs;
 
 		len = libusb_get_device_list(ctx, &devs);
 		if (len < 0) {
-			libusb_hotplug_deregister_callback(ctx,
-							new_callback->handle);
+			libusb_hotplug_deregister_callback(ctx, new_callback->handle);
 			return (int)len;
 		}
 
