@@ -700,19 +700,13 @@ struct libusb_device *usbi_alloc_device(struct libusb_context *ctx,
 {
 	size_t priv_size = usbi_backend.device_priv_size;
 	struct libusb_device *dev = calloc(1, PTR_ALIGN(sizeof(*dev)) + priv_size);
-	int r;
 
 	if (!dev)
 		return NULL;
 
-	r = usbi_mutex_init(&dev->lock);
-	if (r) {
-		free(dev);
-		return NULL;
-	}
+	usbi_atomic_store(&dev->refcnt, 1);
 
 	dev->ctx = ctx;
-	dev->refcnt = 1;
 	dev->session_data = session_id;
 	dev->speed = LIBUSB_SPEED_UNKNOWN;
 
@@ -727,7 +721,7 @@ void usbi_connect_device(struct libusb_device *dev)
 {
 	struct libusb_context *ctx = DEVICE_CTX(dev);
 
-	dev->attached = 1;
+	usbi_atomic_store(&dev->attached, 1);
 
 	usbi_mutex_lock(&dev->ctx->usb_devs_lock);
 	list_add(&dev->list, &dev->ctx->usb_devs);
@@ -745,9 +739,7 @@ void usbi_disconnect_device(struct libusb_device *dev)
 {
 	struct libusb_context *ctx = DEVICE_CTX(dev);
 
-	usbi_mutex_lock(&dev->lock);
-	dev->attached = 0;
-	usbi_mutex_unlock(&dev->lock);
+	usbi_atomic_store(&dev->attached, 0);
 
 	usbi_mutex_lock(&ctx->usb_devs_lock);
 	list_del(&dev->list);
@@ -1178,9 +1170,11 @@ out:
 DEFAULT_VISIBILITY
 libusb_device * LIBUSB_CALL libusb_ref_device(libusb_device *dev)
 {
-	usbi_mutex_lock(&dev->lock);
-	dev->refcnt++;
-	usbi_mutex_unlock(&dev->lock);
+	long refcnt;
+
+	refcnt = usbi_atomic_inc(&dev->refcnt);
+	assert(refcnt >= 2);
+
 	return dev;
 }
 
@@ -1191,16 +1185,10 @@ libusb_device * LIBUSB_CALL libusb_ref_device(libusb_device *dev)
  */
 void API_EXPORTED libusb_unref_device(libusb_device *dev)
 {
-	int refcnt;
-
 	if (!dev)
 		return;
 
-	usbi_mutex_lock(&dev->lock);
-	refcnt = --dev->refcnt;
-	usbi_mutex_unlock(&dev->lock);
-
-	if (refcnt == 0) {
+	if (usbi_atomic_dec(&dev->refcnt) == 0) {
 		usbi_dbg("destroy device %d.%d", dev->bus_number, dev->device_address);
 
 		libusb_unref_device(dev->parent_dev);
@@ -1213,7 +1201,6 @@ void API_EXPORTED libusb_unref_device(libusb_device *dev)
 			usbi_disconnect_device(dev);
 		}
 
-		usbi_mutex_destroy(&dev->lock);
 		free(dev);
 	}
 }
@@ -1264,6 +1251,8 @@ int API_EXPORTED libusb_wrap_sys_device(libusb_context *ctx, intptr_t sys_dev,
 	if (!_dev_handle)
 		return LIBUSB_ERROR_NO_MEM;
 
+	usbi_atomic_store(&_dev_handle->refcnt, 1);
+
 	r = usbi_mutex_init(&_dev_handle->lock);
 	if (r) {
 		free(_dev_handle);
@@ -1312,15 +1301,17 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 	struct libusb_device_handle *_dev_handle;
 	size_t priv_size = usbi_backend.device_handle_priv_size;
 	int r;
+
 	usbi_dbg("open %d.%d", dev->bus_number, dev->device_address);
 
-	if (!dev->attached) {
+	if (!usbi_atomic_load(&dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
-	}
 
 	_dev_handle = calloc(1, PTR_ALIGN(sizeof(*_dev_handle)) + priv_size);
 	if (!_dev_handle)
 		return LIBUSB_ERROR_NO_MEM;
+
+	usbi_atomic_store(&_dev_handle->refcnt, 1);
 
 	r = usbi_mutex_init(&_dev_handle->lock);
 	if (r) {
@@ -1683,7 +1674,7 @@ int API_EXPORTED libusb_claim_interface(libusb_device_handle *dev_handle,
 	if (interface_number < 0 || interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	usbi_mutex_lock(&dev_handle->lock);
@@ -1773,12 +1764,12 @@ int API_EXPORTED libusb_set_interface_alt_setting(libusb_device_handle *dev_hand
 	if (alternate_setting < 0 || alternate_setting > (int)UINT8_MAX)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	usbi_mutex_lock(&dev_handle->lock);
-	if (!dev_handle->dev->attached) {
+	if (!usbi_atomic_load(&dev_handle->dev->attached)) {
 		usbi_mutex_unlock(&dev_handle->lock);
 		return LIBUSB_ERROR_NO_DEVICE;
 	}
 
+	usbi_mutex_lock(&dev_handle->lock);
 	if (!(dev_handle->claimed_interfaces & (1U << interface_number))) {
 		usbi_mutex_unlock(&dev_handle->lock);
 		return LIBUSB_ERROR_NOT_FOUND;
@@ -1809,7 +1800,7 @@ int API_EXPORTED libusb_clear_halt(libusb_device_handle *dev_handle,
 	unsigned char endpoint)
 {
 	usbi_dbg("endpoint %x", endpoint);
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	return usbi_backend.clear_halt(dev_handle, endpoint);
@@ -1837,7 +1828,7 @@ int API_EXPORTED libusb_clear_halt(libusb_device_handle *dev_handle,
 int API_EXPORTED libusb_reset_device(libusb_device_handle *dev_handle)
 {
 	usbi_dbg(" ");
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.reset_device)
@@ -1875,7 +1866,7 @@ int API_EXPORTED libusb_alloc_streams(libusb_device_handle *dev_handle,
 	if (!num_streams || !endpoints || num_endpoints <= 0)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.alloc_streams)
@@ -1905,7 +1896,7 @@ int API_EXPORTED libusb_free_streams(libusb_device_handle *dev_handle,
 	if (!endpoints || num_endpoints <= 0)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.free_streams)
@@ -1943,7 +1934,7 @@ DEFAULT_VISIBILITY
 unsigned char * LIBUSB_CALL libusb_dev_mem_alloc(libusb_device_handle *dev_handle,
         size_t length)
 {
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return NULL;
 
 	if (usbi_backend.dev_mem_alloc)
@@ -1994,7 +1985,7 @@ int API_EXPORTED libusb_kernel_driver_active(libusb_device_handle *dev_handle,
 	if (interface_number < 0 || interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.kernel_driver_active)
@@ -2032,7 +2023,7 @@ int API_EXPORTED libusb_detach_kernel_driver(libusb_device_handle *dev_handle,
 	if (interface_number < 0 || interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.detach_kernel_driver)
@@ -2069,7 +2060,7 @@ int API_EXPORTED libusb_attach_kernel_driver(libusb_device_handle *dev_handle,
 	if (interface_number < 0 || interface_number >= USB_MAXINTERFACES)
 		return LIBUSB_ERROR_INVALID_PARAM;
 
-	if (!dev_handle->dev->attached)
+	if (!usbi_atomic_load(&dev_handle->dev->attached))
 		return LIBUSB_ERROR_NO_DEVICE;
 
 	if (usbi_backend.attach_kernel_driver)

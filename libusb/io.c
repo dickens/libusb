@@ -1316,6 +1316,7 @@ struct libusb_transfer * LIBUSB_CALL libusb_alloc_transfer(
 		return NULL;
 
 	itransfer = (struct usbi_transfer *)(ptr + priv_size);
+	usbi_atomic_store(&itransfer->refcnt, 1);
 	itransfer->num_iso_packets = iso_packets;
 	itransfer->priv = ptr;
 	usbi_mutex_init(&itransfer->lock);
