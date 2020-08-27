@@ -1253,11 +1253,7 @@ int API_EXPORTED libusb_wrap_sys_device(libusb_context *ctx, intptr_t sys_dev,
 
 	usbi_atomic_store(&_dev_handle->refcnt, 1);
 
-	r = usbi_mutex_init(&_dev_handle->lock);
-	if (r) {
-		free(_dev_handle);
-		return LIBUSB_ERROR_OTHER;
-	}
+	usbi_mutex_init(&_dev_handle->lock);
 
 	r = usbi_backend.wrap_sys_device(ctx, _dev_handle, sys_dev);
 	if (r < 0) {
@@ -1313,11 +1309,7 @@ int API_EXPORTED libusb_open(libusb_device *dev,
 
 	usbi_atomic_store(&_dev_handle->refcnt, 1);
 
-	r = usbi_mutex_init(&_dev_handle->lock);
-	if (r) {
-		free(_dev_handle);
-		return LIBUSB_ERROR_OTHER;
-	}
+	usbi_mutex_init(&_dev_handle->lock);
 
 	_dev_handle->dev = libusb_ref_device(dev);
 
