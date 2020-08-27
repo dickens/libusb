@@ -41,10 +41,6 @@ enum windows_version windows_version = WINDOWS_UNDEFINED;
 static unsigned int init_count;
 static bool usbdk_available;
 
-// Global variables for clock_gettime mechanism
-static uint64_t hires_ticks_to_ps;
-static uint64_t hires_frequency;
-
 /*
 * Converts a windows error to human readable string
 * uses retval as errorcode, or, if 0, use GetLastError()
@@ -280,21 +276,6 @@ void windows_force_sync_completion(struct usbi_transfer *itransfer, ULONG size)
 	usbi_signal_transfer_completion(itransfer);
 }
 
-static void windows_init_clock(void)
-{
-	LARGE_INTEGER li_frequency;
-
-	// Microsoft says that the QueryPerformanceFrequency() and
-	// QueryPerformanceCounter() functions always succeed on XP and later
-	QueryPerformanceFrequency(&li_frequency);
-
-	// The hires frequency can go as high as 4 GHz, so we'll use a conversion
-	// to picoseconds to compute the tv_nsecs part in clock_gettime
-	hires_frequency = li_frequency.QuadPart;
-	hires_ticks_to_ps = UINT64_C(1000000000000) / hires_frequency;
-	usbi_dbg("hires timer frequency: %"PRIu64" Hz", hires_frequency);
-}
-
 /* Windows version detection */
 static BOOL is_x64(void)
 {
@@ -473,8 +454,6 @@ static int windows_init(struct libusb_context *ctx)
 			r = LIBUSB_ERROR_NOT_SUPPORTED;
 			goto init_exit;
 		}
-
-		windows_init_clock();
 
 		if (!htab_create(ctx)) {
 			r = LIBUSB_ERROR_NO_MEM;
@@ -815,7 +794,23 @@ static int windows_handle_transfer_completion(struct usbi_transfer *itransfer)
 
 void usbi_get_monotonic_time(struct timespec *tp)
 {
+	static LONG hires_counter_init;
+	static uint64_t hires_ticks_to_ps;
+	static uint64_t hires_frequency;
 	LARGE_INTEGER hires_counter;
+
+	if (InterlockedExchange(&hires_counter_init, 1L) == 0L) {
+		LARGE_INTEGER li_frequency;
+
+		// Microsoft says that the QueryPerformanceFrequency() and
+		// QueryPerformanceCounter() functions always succeed on XP and later
+		QueryPerformanceFrequency(&li_frequency);
+
+		// The hires frequency can go as high as 4 GHz, so we'll use a conversion
+		// to picoseconds to compute the tv_nsecs part
+		hires_frequency = li_frequency.QuadPart;
+		hires_ticks_to_ps = UINT64_C(1000000000000) / hires_frequency;
+	}
 
 	QueryPerformanceCounter(&hires_counter);
 	tp->tv_sec = (long)(hires_counter.QuadPart / hires_frequency);
