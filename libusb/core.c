@@ -21,7 +21,6 @@
  */
 
 #include "libusbi.h"
-#include "hotplug.h"
 #include "version.h"
 
 #ifdef __ANDROID__
@@ -430,6 +429,7 @@ if (cfg != desired)
   * - libusb_handle_events_timeout_completed()
   * - libusb_has_capability()
   * - libusb_hotplug_deregister_callback()
+  * - libusb_hotplug_get_user_data()
   * - libusb_hotplug_register_callback()
   * - libusb_init()
   * - libusb_interrupt_event_handler()
@@ -710,48 +710,10 @@ struct libusb_device *usbi_alloc_device(struct libusb_context *ctx,
 	dev->session_data = session_id;
 	dev->speed = LIBUSB_SPEED_UNKNOWN;
 
-	if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+	if (!usbi_backend_has_hotplug())
 		usbi_connect_device (dev);
-	}
 
 	return dev;
-}
-
-void usbi_connect_device(struct libusb_device *dev)
-{
-	struct libusb_context *ctx = DEVICE_CTX(dev);
-
-	usbi_atomic_store(&dev->attached, 1);
-
-	usbi_mutex_lock(&dev->ctx->usb_devs_lock);
-	list_add(&dev->list, &dev->ctx->usb_devs);
-	usbi_mutex_unlock(&dev->ctx->usb_devs_lock);
-
-	/* Signal that an event has occurred for this device if we support hotplug AND
-	 * the hotplug message list is ready. This prevents an event from getting raised
-	 * during initial enumeration. */
-	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG) && dev->ctx->hotplug_msgs.next) {
-		usbi_hotplug_notification(ctx, dev, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED);
-	}
-}
-
-void usbi_disconnect_device(struct libusb_device *dev)
-{
-	struct libusb_context *ctx = DEVICE_CTX(dev);
-
-	usbi_atomic_store(&dev->attached, 0);
-
-	usbi_mutex_lock(&ctx->usb_devs_lock);
-	list_del(&dev->list);
-	usbi_mutex_unlock(&ctx->usb_devs_lock);
-
-	/* Signal that an event has occurred for this device if we support hotplug AND
-	 * the hotplug message list is ready. This prevents an event from getting raised
-	 * during initial enumeration. libusb_handle_events will take care of dereferencing
-	 * the device. */
-	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG) && dev->ctx->hotplug_msgs.next) {
-		usbi_hotplug_notification(ctx, dev, LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT);
-	}
 }
 
 /* Perform some final sanity checks on a newly discovered device. If this
@@ -799,6 +761,20 @@ struct libusb_device *usbi_get_device_by_session_id(struct libusb_context *ctx,
 	return ret;
 }
 
+/* Record the occurrence of an internal event, potentially interrupting the
+ * iteration of the event handling thread so that it processes the event.
+ * Callers of this function must hold the event_data_lock. */
+void usbi_set_event_flag_locked(struct libusb_context *ctx, unsigned int event_flag)
+{
+	unsigned int event_flags;
+
+	/* Only signal the event if there are no prior pending events. */
+	event_flags = ctx->event_flags;
+	ctx->event_flags |= event_flag;
+	if (!event_flags)
+		usbi_signal_event(&ctx->event);
+}
+
 /** @ingroup libusb_dev
  * Returns a list of USB devices currently attached to the system. This is
  * your entry point into finding a USB device to operate.
@@ -823,9 +799,10 @@ ssize_t API_EXPORTED libusb_get_device_list(libusb_context *ctx,
 	libusb_device ***list)
 {
 	struct discovered_devs *discdevs = discovered_devs_alloc();
-	struct libusb_device **ret;
+	struct libusb_device *dev, **ret;
 	int r = 0;
-	ssize_t i, len;
+	ssize_t len;
+	size_t i;
 
 	usbi_dbg(" ");
 
@@ -834,9 +811,8 @@ ssize_t API_EXPORTED libusb_get_device_list(libusb_context *ctx,
 
 	ctx = usbi_get_context(ctx);
 
-	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+	if (usbi_backend_has_hotplug()) {
 		/* backend provides hotplug support */
-		struct libusb_device *dev;
 
 		if (usbi_backend.hotplug_poll)
 			usbi_backend.hotplug_poll();
@@ -862,19 +838,18 @@ ssize_t API_EXPORTED libusb_get_device_list(libusb_context *ctx,
 	}
 
 	/* convert discovered_devs into a list */
-	len = (ssize_t)discdevs->len;
-	ret = calloc((size_t)len + 1, sizeof(struct libusb_device *));
+	ret = calloc(discdevs->len + 1, sizeof(struct libusb_device *));
 	if (!ret) {
 		len = LIBUSB_ERROR_NO_MEM;
 		goto out;
 	}
 
-	ret[len] = NULL;
-	for (i = 0; i < len; i++) {
-		struct libusb_device *dev = discdevs->devices[i];
+	for (i = 0; i < discdevs->len; i++) {
+		dev = discdevs->devices[i];
 		ret[i] = libusb_ref_device(dev);
 	}
 	*list = ret;
+	len = (ssize_t)discdevs->len;
 
 out:
 	if (discdevs)
@@ -1196,7 +1171,7 @@ void API_EXPORTED libusb_unref_device(libusb_device *dev)
 		if (usbi_backend.destroy_device)
 			usbi_backend.destroy_device(dev);
 
-		if (!libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
+		if (!usbi_backend_has_hotplug()) {
 			/* backend does not support hotplug */
 			usbi_disconnect_device(dev);
 		}
@@ -1350,35 +1325,34 @@ DEFAULT_VISIBILITY
 libusb_device_handle * LIBUSB_CALL libusb_open_device_with_vid_pid(
 	libusb_context *ctx, uint16_t vendor_id, uint16_t product_id)
 {
-	struct libusb_device **devs;
-	struct libusb_device *found = NULL;
-	struct libusb_device *dev;
-	struct libusb_device_handle *dev_handle = NULL;
-	size_t i = 0;
-	int r;
+	struct libusb_device *dev, *found = NULL;
+	struct libusb_device_handle *dev_handle;
 
-	if (libusb_get_device_list(ctx, &devs) < 0)
-		return NULL;
+	ctx = usbi_get_context(ctx);
 
-	while ((dev = devs[i++]) != NULL) {
-		struct libusb_device_descriptor desc;
-		r = libusb_get_device_descriptor(dev, &desc);
-		if (r < 0)
-			goto out;
-		if (desc.idVendor == vendor_id && desc.idProduct == product_id) {
-			found = dev;
+	usbi_mutex_lock(&ctx->usb_devs_lock);
+	for_each_device(ctx, dev) {
+		struct libusb_device_descriptor *desc = &dev->device_descriptor;
+
+		if (desc->idVendor == vendor_id && desc->idProduct == product_id) {
+			found = libusb_ref_device(dev);
 			break;
 		}
 	}
+	usbi_mutex_unlock(&ctx->usb_devs_lock);
 
 	if (found) {
-		r = libusb_open(found, &dev_handle);
+		int r = libusb_open(found, &dev_handle);
+
 		if (r < 0)
 			dev_handle = NULL;
+
+		/* always unreference the found device */
+		libusb_unref_device(found);
+	} else {
+		dev_handle = NULL;
 	}
 
-out:
-	libusb_free_device_list(devs, 1);
 	return dev_handle;
 }
 
@@ -1450,7 +1424,6 @@ static void do_close(struct libusb_context *ctx,
 void API_EXPORTED libusb_close(libusb_device_handle *dev_handle)
 {
 	struct libusb_context *ctx;
-	unsigned int event_flags;
 	int handling_events;
 
 	if (!dev_handle)
@@ -1469,14 +1442,10 @@ void API_EXPORTED libusb_close(libusb_device_handle *dev_handle)
 	 * hold the event handling lock. */
 
 	if (!handling_events) {
-		/* Record that we are closing a device.
-		 * Only signal an event if there are no prior pending events. */
+		/* Record that we are closing a device. */
 		usbi_mutex_lock(&ctx->event_data_lock);
-		event_flags = ctx->event_flags;
 		if (!ctx->device_close++)
-			ctx->event_flags |= USBI_EVENT_DEVICE_CLOSE;
-		if (!event_flags)
-			usbi_signal_event(&ctx->event);
+			usbi_set_event_flag_locked(ctx, USBI_EVENT_DEVICE_CLOSE);
 		usbi_mutex_unlock(&ctx->event_data_lock);
 
 		/* take event handling lock */
@@ -1488,7 +1457,7 @@ void API_EXPORTED libusb_close(libusb_device_handle *dev_handle)
 
 	if (!handling_events) {
 		/* We're done with closing this device.
-		 * Clear the event pipe if there are no further pending events. */
+		 * Clear the event if there are no further pending events. */
 		usbi_mutex_lock(&ctx->event_data_lock);
 		if (!--ctx->device_close)
 			ctx->event_flags &= ~USBI_EVENT_DEVICE_CLOSE;
@@ -2248,10 +2217,8 @@ static enum libusb_log_level get_env_debug_level(void)
  */
 int API_EXPORTED libusb_init(libusb_context **context)
 {
-	struct libusb_device *dev, *next;
 	size_t priv_size = usbi_backend.context_priv_size;
 	struct libusb_context *ctx;
-	static int first_init = 1;
 	int r = 0;
 
 	usbi_mutex_static_lock(&default_context_lock);
@@ -2288,31 +2255,29 @@ int API_EXPORTED libusb_init(libusb_context **context)
 	usbi_dbg("libusb v%u.%u.%u.%u%s", libusb_version_internal.major, libusb_version_internal.minor,
 		libusb_version_internal.micro, libusb_version_internal.nano, libusb_version_internal.rc);
 
-	usbi_mutex_init(&ctx->usb_devs_lock);
-	usbi_mutex_init(&ctx->open_devs_lock);
-	usbi_mutex_init(&ctx->hotplug_cbs_lock);
+	usbi_mutex_init_recursive(&ctx->usb_devs_lock);
 	list_init(&ctx->usb_devs);
+
+	usbi_mutex_init(&ctx->open_devs_lock);
 	list_init(&ctx->open_devs);
-	list_init(&ctx->hotplug_cbs);
-	ctx->next_hotplug_cb_handle = 1;
+
+	usbi_hotplug_init(ctx);
+
+	r = usbi_io_init(ctx);
+	if (r < 0)
+		goto err_hotplug_exit;
 
 	usbi_mutex_static_lock(&active_contexts_lock);
-	if (first_init) {
-		first_init = 0;
+	if (!active_contexts_list.next)
 		list_init(&active_contexts_list);
-	}
-	list_add (&ctx->list, &active_contexts_list);
+	list_add(&ctx->list, &active_contexts_list);
 	usbi_mutex_static_unlock(&active_contexts_lock);
 
 	if (usbi_backend.init) {
 		r = usbi_backend.init(ctx);
 		if (r)
-			goto err_free_ctx;
+			goto err_io_exit;
 	}
-
-	r = usbi_io_init(ctx);
-	if (r < 0)
-		goto err_backend_exit;
 
 	usbi_mutex_static_unlock(&default_context_lock);
 
@@ -2321,29 +2286,22 @@ int API_EXPORTED libusb_init(libusb_context **context)
 
 	return 0;
 
-err_backend_exit:
-	if (usbi_backend.exit)
-		usbi_backend.exit(ctx);
-err_free_ctx:
+err_io_exit:
+	usbi_io_exit(ctx);
+
+	usbi_mutex_static_lock(&active_contexts_lock);
+	list_del(&ctx->list);
+	usbi_mutex_static_unlock(&active_contexts_lock);
+err_hotplug_exit:
 	if (ctx == usbi_default_context) {
 		usbi_default_context = NULL;
 		default_context_refcnt--;
 	}
 
-	usbi_mutex_static_lock(&active_contexts_lock);
-	list_del(&ctx->list);
-	usbi_mutex_static_unlock(&active_contexts_lock);
-
-	usbi_mutex_lock(&ctx->usb_devs_lock);
-	for_each_device_safe(ctx, dev, next) {
-		list_del(&dev->list);
-		libusb_unref_device(dev);
-	}
-	usbi_mutex_unlock(&ctx->usb_devs_lock);
+	usbi_hotplug_exit(ctx);
 
 	usbi_mutex_destroy(&ctx->open_devs_lock);
 	usbi_mutex_destroy(&ctx->usb_devs_lock);
-	usbi_mutex_destroy(&ctx->hotplug_cbs_lock);
 
 	free(ctx);
 err_unlock:
@@ -2358,8 +2316,6 @@ err_unlock:
  */
 void API_EXPORTED libusb_exit(libusb_context *ctx)
 {
-	struct libusb_device *dev, *next;
-	struct timeval tv = { 0, 0 };
 	int destroying_default_context = 0;
 
 	usbi_dbg(" ");
@@ -2399,28 +2355,12 @@ void API_EXPORTED libusb_exit(libusb_context *ctx)
 	list_del(&ctx->list);
 	usbi_mutex_static_unlock(&active_contexts_lock);
 
-	if (libusb_has_capability(LIBUSB_CAP_HAS_HOTPLUG)) {
-		usbi_hotplug_deregister(ctx, 1);
+	if (usbi_backend.exit)
+		usbi_backend.exit(ctx);
 
-		/*
-		 * Ensure any pending unplug events are read from the hotplug
-		 * pipe. The usb_device-s hold in the events are no longer part
-		 * of usb_devs, but the events still hold a reference!
-		 *
-		 * Note we don't do this if the application has left devices
-		 * open (which implies a buggy app) to avoid packet completion
-		 * handlers running when the app does not expect them to run.
-		 */
-		if (list_empty(&ctx->open_devs))
-			libusb_handle_events_timeout(ctx, &tv);
+	usbi_io_exit(ctx);
 
-		usbi_mutex_lock(&ctx->usb_devs_lock);
-		for_each_device_safe(ctx, dev, next) {
-			list_del(&dev->list);
-			libusb_unref_device(dev);
-		}
-		usbi_mutex_unlock(&ctx->usb_devs_lock);
-	}
+	usbi_hotplug_exit(ctx);
 
 	/* a few sanity checks. don't bother with locking because unless
 	 * there is an application bug, nobody will be accessing these. */
@@ -2429,13 +2369,8 @@ void API_EXPORTED libusb_exit(libusb_context *ctx)
 	if (!list_empty(&ctx->open_devs))
 		usbi_warn(ctx, "application left some devices open");
 
-	usbi_io_exit(ctx);
-	if (usbi_backend.exit)
-		usbi_backend.exit(ctx);
-
 	usbi_mutex_destroy(&ctx->open_devs_lock);
 	usbi_mutex_destroy(&ctx->usb_devs_lock);
-	usbi_mutex_destroy(&ctx->hotplug_cbs_lock);
 	free(ctx);
 
 	if (destroying_default_context) {
@@ -2458,7 +2393,7 @@ int API_EXPORTED libusb_has_capability(uint32_t capability)
 	case LIBUSB_CAP_HAS_CAPABILITY:
 		return 1;
 	case LIBUSB_CAP_HAS_HOTPLUG:
-		return !(usbi_backend.get_device_list);
+		return usbi_backend_has_hotplug();
 	case LIBUSB_CAP_HAS_HID_ACCESS:
 		return (usbi_backend.caps & USBI_CAP_HAS_HID_ACCESS);
 	case LIBUSB_CAP_SUPPORTS_DETACH_KERNEL_DRIVER:

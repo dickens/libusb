@@ -39,6 +39,17 @@
 # include <sys/lwp.h>
 #endif
 
+void __usbi_mutex_init(pthread_mutex_t *mutex, int recursive)
+{
+	int type = recursive ? PTHREAD_MUTEX_RECURSIVE : PTHREAD_MUTEX_NORMAL;
+	pthread_mutexattr_t mutexattr;
+
+	PTHREAD_CHECK(pthread_mutexattr_init(&mutexattr));
+	PTHREAD_CHECK(pthread_mutexattr_settype(&mutexattr, type));
+	PTHREAD_CHECK(pthread_mutex_init(mutex, &mutexattr));
+	PTHREAD_CHECK(pthread_mutexattr_destroy(&mutexattr));
+}
+
 void usbi_cond_init(pthread_cond_t *cond)
 {
 #ifdef HAVE_PTHREAD_CONDATTR_SETCLOCK

@@ -44,6 +44,11 @@ static inline void usbi_mutex_init(usbi_mutex_t *mutex)
 {
 	InitializeCriticalSection(mutex);
 }
+static inline void usbi_mutex_init_recursive(usbi_mutex_t *mutex)
+{
+	/* All Windows mutexes are recursive */
+	InitializeCriticalSection(mutex);
+}
 static inline void usbi_mutex_lock(usbi_mutex_t *mutex)
 {
 	EnterCriticalSection(mutex);

@@ -41,9 +41,14 @@ static inline void usbi_mutex_static_unlock(usbi_mutex_static_t *mutex)
 }
 
 typedef pthread_mutex_t usbi_mutex_t;
+void __usbi_mutex_init(usbi_mutex_t *mutex, int recursive);
 static inline void usbi_mutex_init(usbi_mutex_t *mutex)
 {
-	PTHREAD_CHECK(pthread_mutex_init(mutex, NULL));
+	__usbi_mutex_init(mutex, 0);
+}
+static inline void usbi_mutex_init_recursive(usbi_mutex_t *mutex)
+{
+	__usbi_mutex_init(mutex, 1);
 }
 static inline void usbi_mutex_lock(usbi_mutex_t *mutex)
 {

@@ -5,6 +5,7 @@
  * Copyright © 2001 Johannes Erdfelt <johannes@erdfelt.com>
  * Copyright © 2019 Nathan Hjelm <hjelmn@cs.umm.edu>
  * Copyright © 2019 Google LLC. All rights reserved.
+ * Copyright © 2013-2020 Chris Dickens <christopher.a.dickens@gmail.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -22,7 +23,6 @@
  */
 
 #include "libusbi.h"
-#include "hotplug.h"
 
 /**
  * \page libusb_io Synchronous and asynchronous device I/O
@@ -1167,7 +1167,6 @@ int usbi_io_init(struct libusb_context *ctx)
 	list_init(&ctx->flying_transfers);
 	list_init(&ctx->event_sources);
 	list_init(&ctx->removed_event_sources);
-	list_init(&ctx->hotplug_msgs);
 	list_init(&ctx->completed_transfers);
 
 	r = usbi_create_event(&ctx->event);
@@ -1733,14 +1732,10 @@ void usbi_signal_transfer_completion(struct usbi_transfer *itransfer)
 
 	if (dev_handle) {
 		struct libusb_context *ctx = HANDLE_CTX(dev_handle);
-		unsigned int event_flags;
 
 		usbi_mutex_lock(&ctx->event_data_lock);
-		event_flags = ctx->event_flags;
-		ctx->event_flags |= USBI_EVENT_TRANSFER_COMPLETED;
 		list_add_tail(&itransfer->completed_list, &ctx->completed_transfers);
-		if (!event_flags)
-			usbi_signal_event(&ctx->event);
+		usbi_set_event_flag_locked(ctx, USBI_EVENT_TRANSFER_COMPLETED);
 		usbi_mutex_unlock(&ctx->event_data_lock);
 	}
 }
@@ -1917,19 +1912,10 @@ int API_EXPORTED libusb_event_handler_active(libusb_context *ctx)
  */
 void API_EXPORTED libusb_interrupt_event_handler(libusb_context *ctx)
 {
-	unsigned int event_flags;
-
 	usbi_dbg(" ");
 
 	ctx = usbi_get_context(ctx);
-	usbi_mutex_lock(&ctx->event_data_lock);
-
-	event_flags = ctx->event_flags;
-	ctx->event_flags |= USBI_EVENT_USER_INTERRUPT;
-	if (!event_flags)
-		usbi_signal_event(&ctx->event);
-
-	usbi_mutex_unlock(&ctx->event_data_lock);
+	usbi_set_event_flag(ctx, USBI_EVENT_USER_INTERRUPT);
 }
 
 /** \ingroup libusb_poll
@@ -2073,12 +2059,9 @@ static void handle_timeouts(struct libusb_context *ctx)
 
 static int handle_event_trigger(struct libusb_context *ctx)
 {
-	struct list_head hotplug_msgs;
-	int r = 0;
+	int hotplug_notification_pending;
 
 	usbi_dbg("event triggered");
-
-	list_init(&hotplug_msgs);
 
 	/* take the the event data lock while processing events */
 	usbi_mutex_lock(&ctx->event_data_lock);
@@ -2092,35 +2075,42 @@ static int handle_event_trigger(struct libusb_context *ctx)
 		ctx->event_flags &= ~USBI_EVENT_USER_INTERRUPT;
 	}
 
+	if (ctx->event_flags & USBI_EVENT_HOTPLUG_CB_DEREGISTERED) {
+		usbi_dbg("someone deregistered a hotplug cb");
+		ctx->event_flags &= ~USBI_EVENT_HOTPLUG_CB_DEREGISTERED;
+	}
+
 	/* check if someone is closing a device */
 	if (ctx->event_flags & USBI_EVENT_DEVICE_CLOSE)
 		usbi_dbg("someone is closing a device");
 
-	/* check for any pending hotplug messages */
-	if (ctx->event_flags & USBI_EVENT_HOTPLUG_MSG_PENDING) {
-		usbi_dbg("hotplug message received");
-		ctx->event_flags &= ~USBI_EVENT_HOTPLUG_MSG_PENDING;
-		assert(!list_empty(&ctx->hotplug_msgs));
-		list_cut(&hotplug_msgs, &ctx->hotplug_msgs);
-	}
-
 	/* complete any pending transfers */
 	if (ctx->event_flags & USBI_EVENT_TRANSFER_COMPLETED) {
 		assert(!list_empty(&ctx->completed_transfers));
-		while (r == 0 && !list_empty(&ctx->completed_transfers)) {
+		while (!list_empty(&ctx->completed_transfers)) {
 			struct usbi_transfer *itransfer =
 				list_first_entry(&ctx->completed_transfers, struct usbi_transfer, completed_list);
+			int r;
 
 			list_del(&itransfer->completed_list);
 			usbi_mutex_unlock(&ctx->event_data_lock);
 			r = usbi_backend.handle_transfer_completion(itransfer);
-			if (r)
+			if (r) {
 				usbi_err(ctx, "backend handle_transfer_completion failed with error %d", r);
+				return r;
+			}
 			usbi_mutex_lock(&ctx->event_data_lock);
 		}
+		ctx->event_flags &= ~USBI_EVENT_TRANSFER_COMPLETED;
+	}
 
-		if (list_empty(&ctx->completed_transfers))
-			ctx->event_flags &= ~USBI_EVENT_TRANSFER_COMPLETED;
+	/* check for any pending hotplug notifications */
+	if (ctx->event_flags & USBI_EVENT_HOTPLUG_NOTIFICATION_PENDING) {
+		usbi_dbg("hotplug notification pending");
+		ctx->event_flags &= ~USBI_EVENT_HOTPLUG_NOTIFICATION_PENDING;
+		hotplug_notification_pending = 1;
+	} else {
+		hotplug_notification_pending = 0;
 	}
 
 	/* if no further pending events, clear the event */
@@ -2129,22 +2119,11 @@ static int handle_event_trigger(struct libusb_context *ctx)
 
 	usbi_mutex_unlock(&ctx->event_data_lock);
 
-	/* process the hotplug messages, if any */
-	while (!list_empty(&hotplug_msgs)) {
-		struct libusb_hotplug_message *message =
-			list_first_entry(&hotplug_msgs, struct libusb_hotplug_message, list);
+	/* process the hotplug notifications, if any */
+	if (hotplug_notification_pending)
+		usbi_hotplug_process_notifications(ctx);
 
-		usbi_hotplug_match(ctx, message->device, message->event);
-
-		/* the device left, dereference the device */
-		if (message->event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT)
-			libusb_unref_device(message->device);
-
-		list_del(&message->list);
-		free(message);
-	}
-
-	return r;
+	return 0;
 }
 
 #ifdef HAVE_OS_TIMER
@@ -2171,6 +2150,7 @@ static int handle_timer_trigger(struct libusb_context *ctx)
 static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 {
 	struct usbi_reported_events reported_events;
+	unsigned int event_handling_flags;
 	int r, timeout_ms;
 
 	/* prevent attempts to recursively handle events (e.g. calling into
@@ -2212,7 +2192,7 @@ static int handle_events(struct libusb_context *ctx, struct timeval *tv)
 
 	reported_events.event_bits = 0;
 
-	usbi_start_event_handling(ctx);
+	usbi_start_event_handling(ctx, &event_handling_flags);
 
 	r = usbi_wait_for_events(ctx, &reported_events, timeout_ms);
 	if (r != LIBUSB_SUCCESS) {
@@ -2623,22 +2603,6 @@ void API_EXPORTED libusb_set_pollfd_notifiers(libusb_context *ctx,
 #endif
 }
 
-/*
- * Interrupt the iteration of the event handling thread, so that it picks
- * up the event source change. Callers of this function must hold the event_data_lock.
- */
-static void usbi_event_source_notification(struct libusb_context *ctx)
-{
-	unsigned int event_flags;
-
-	/* Record that there is a new poll fd.
-	 * Only signal an event if there are no prior pending events. */
-	event_flags = ctx->event_flags;
-	ctx->event_flags |= USBI_EVENT_EVENT_SOURCES_MODIFIED;
-	if (!event_flags)
-		usbi_signal_event(&ctx->event);
-}
-
 /* Add an event source to the list of event sources to be monitored.
  * poll_events should be specified as a bitmask of events passed to poll(), e.g.
  * POLLIN and/or POLLOUT. */
@@ -2654,7 +2618,7 @@ int usbi_add_event_source(struct libusb_context *ctx, usbi_os_handle_t os_handle
 	ievent_source->data.poll_events = poll_events;
 	usbi_mutex_lock(&ctx->event_data_lock);
 	list_add_tail(&ievent_source->list, &ctx->event_sources);
-	usbi_event_source_notification(ctx);
+	usbi_set_event_flag_locked(ctx, USBI_EVENT_EVENT_SOURCES_MODIFIED);
 	usbi_mutex_unlock(&ctx->event_data_lock);
 
 #if !defined(PLATFORM_WINDOWS)
@@ -2688,7 +2652,7 @@ void usbi_remove_event_source(struct libusb_context *ctx, usbi_os_handle_t os_ha
 
 	list_del(&ievent_source->list);
 	list_add_tail(&ievent_source->list, &ctx->removed_event_sources);
-	usbi_event_source_notification(ctx);
+	usbi_set_event_flag_locked(ctx, USBI_EVENT_EVENT_SOURCES_MODIFIED);
 	usbi_mutex_unlock(&ctx->event_data_lock);
 
 #if !defined(PLATFORM_WINDOWS)

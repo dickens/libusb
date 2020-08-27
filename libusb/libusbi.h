@@ -349,10 +349,9 @@ struct libusb_context {
 	struct list_head open_devs;
 	usbi_mutex_t open_devs_lock;
 
-	/* A list of registered hotplug callbacks */
+	/* A list of registered hotplug callbacks. Protected by usb_devs_lock. */
 	struct list_head hotplug_cbs;
 	libusb_hotplug_callback_handle next_hotplug_cb_handle;
-	usbi_mutex_t hotplug_cbs_lock;
 
 	/* this is a list of in-flight transfer handles, sorted by timeout
 	 * expiration. URBs to timeout the soonest are placed at the beginning of
@@ -437,8 +436,8 @@ enum usbi_event_flags {
 	/* A hotplug callback deregistration is pending */
 	USBI_EVENT_HOTPLUG_CB_DEREGISTERED = 1U << 2,
 
-	/* One or more hotplug messages are pending */
-	USBI_EVENT_HOTPLUG_MSG_PENDING = 1U << 3,
+	/* One or more hotplug notifications are pending */
+	USBI_EVENT_HOTPLUG_NOTIFICATION_PENDING = 1U << 3,
 
 	/* One or more completed transfers are pending */
 	USBI_EVENT_TRANSFER_COMPLETED = 1U << 4,
@@ -447,20 +446,59 @@ enum usbi_event_flags {
 	USBI_EVENT_DEVICE_CLOSE = 1U << 5,
 };
 
+enum usbi_event_handling_flags {
+	/* Currently processing hotplug notifications */
+	USBI_HANDLING_HOTPLUG_NOTIFICATIONS = 1U << 0,
+
+	/* One or more hotplug callbacks were freed */
+	USBI_HOTPLUG_CB_FREED = 1U << 1,
+};
+
 /* Macros for managing event handling state */
 static inline int usbi_handling_events(struct libusb_context *ctx)
 {
 	return usbi_tls_key_get(ctx->event_handling_key) != NULL;
 }
 
-static inline void usbi_start_event_handling(struct libusb_context *ctx)
+static inline void usbi_start_event_handling(struct libusb_context *ctx, unsigned int *flags)
 {
-	usbi_tls_key_set(ctx->event_handling_key, ctx);
+	*flags = 0;
+	usbi_tls_key_set(ctx->event_handling_key, flags);
 }
 
 static inline void usbi_end_event_handling(struct libusb_context *ctx)
 {
 	usbi_tls_key_set(ctx->event_handling_key, NULL);
+}
+
+static inline void usbi_set_event_handling_flag(struct libusb_context *ctx, unsigned int flag)
+{
+	unsigned int *flags = usbi_tls_key_get(ctx->event_handling_key);
+
+	*flags |= flag;
+}
+
+static inline void usbi_clear_event_handling_flag(struct libusb_context *ctx, unsigned int flag)
+{
+	unsigned int *flags = usbi_tls_key_get(ctx->event_handling_key);
+
+	*flags &= ~flag;
+}
+
+static inline int usbi_test_event_handling_flag(struct libusb_context *ctx, unsigned int flag)
+{
+	unsigned int *flags = usbi_tls_key_get(ctx->event_handling_key);
+
+	return flags && (*flags & flag);
+}
+
+void usbi_set_event_flag_locked(struct libusb_context *ctx, unsigned int event_flag);
+
+static inline void usbi_set_event_flag(struct libusb_context *ctx, unsigned int event_flag)
+{
+	usbi_mutex_lock(&ctx->event_data_lock);
+	usbi_set_event_flag_locked(ctx, event_flag);
+	usbi_mutex_unlock(&ctx->event_data_lock);
 }
 
 struct libusb_device {
@@ -707,6 +745,72 @@ struct usbi_event_source {
 int usbi_add_event_source(struct libusb_context *ctx, usbi_os_handle_t os_handle,
 	short poll_events);
 void usbi_remove_event_source(struct libusb_context *ctx, usbi_os_handle_t os_handle);
+
+struct usbi_hotplug_notification {
+	/* The hotplug event that occurred */
+	libusb_hotplug_event event;
+
+	/* The device for which this hotplug event occurred */
+	struct libusb_device *device;
+};
+
+enum usbi_hotplug_callback_flags {
+	/* This callback is interested in device arrivals */
+	USBI_HOTPLUG_DEVICE_ARRIVED = LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED,
+
+	/* This callback is interested in device removals */
+	USBI_HOTPLUG_DEVICE_LEFT = LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT,
+
+	/* IMPORTANT: The values for the below entries must start *after*
+	 * the highest value of the above entries!!!
+	 */
+
+	/* The vendor_id field is valid for matching */
+	USBI_HOTPLUG_VENDOR_ID_VALID = (1U << 3),
+
+	/* The product_id field is valid for matching */
+	USBI_HOTPLUG_PRODUCT_ID_VALID = (1U << 4),
+
+	/* The dev_class field is valid for matching */
+	USBI_HOTPLUG_DEV_CLASS_VALID = (1U << 5),
+
+	/* This callback has been unregistered and needs to be freed */
+	USBI_HOTPLUG_NEEDS_FREE = (1U << 6),
+};
+
+struct usbi_hotplug_callback {
+	/* Flags that control how this callback behaves */
+	uint8_t flags;
+
+	/* Vendor ID to match (if flags says this is valid) */
+	uint16_t vendor_id;
+
+	/* Product ID to match (if flags says this is valid) */
+	uint16_t product_id;
+
+	/* Device class to match (if flags says this is valid) */
+	uint8_t dev_class;
+
+	/* Callback function to invoke for matching event/device */
+	libusb_hotplug_callback_fn callback;
+
+	/* Handle for this callback (used to match on deregister) */
+	libusb_hotplug_callback_handle handle;
+
+	/* User data that will be passed to the callback function */
+	void *user_data;
+
+	/* List this callback is registered in (ctx->hotplug_cbs) */
+	struct list_head list;
+
+	/* Array and count of pending notifications for this callback */
+	struct usbi_hotplug_notification *notifications;
+	unsigned int num_notifications;
+};
+
+void usbi_hotplug_init(struct libusb_context *ctx);
+void usbi_hotplug_exit(struct libusb_context *ctx);
+void usbi_hotplug_process_notifications(struct libusb_context *ctx);
 
 /* OS event abstraction */
 
@@ -1341,6 +1445,11 @@ struct usbi_os_backend {
 
 extern const struct usbi_os_backend usbi_backend;
 
+static inline int usbi_backend_has_hotplug(void)
+{
+	return !usbi_backend.get_device_list;
+}
+
 #define for_each_context(c) \
 	for_each_helper(c, &active_contexts_list, struct libusb_context)
 
@@ -1367,6 +1476,12 @@ extern const struct usbi_os_backend usbi_backend;
 
 #define for_each_removed_event_source_safe(ctx, e, n) \
 	for_each_safe_helper(e, n, &(ctx)->removed_event_sources, struct usbi_event_source)
+
+#define for_each_hotplug_cb(ctx, c) \
+	for_each_helper(c, &(ctx)->hotplug_cbs, struct usbi_hotplug_callback)
+
+#define for_each_hotplug_cb_safe(ctx, c, n) \
+	for_each_safe_helper(c, n, &(ctx)->hotplug_cbs, struct usbi_hotplug_callback)
 
 #ifdef __cplusplus
 }
