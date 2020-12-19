@@ -29,6 +29,7 @@ addons:
             - automake
             - libtool
             - m4
+        update: true
 
 cache:
     directories:
@@ -38,7 +39,6 @@ before_cache:
     - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew cleanup; fi
 
 before_script:
-    - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update --formula; fi
     - ./bootstrap.sh
 
 script:
