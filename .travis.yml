@@ -5,24 +5,6 @@ git:
 
 matrix:
     include:
-        - os: linux
-          dist: focal
-          compiler: clang
-        - os: linux
-          dist: focal
-          compiler: gcc
-        - os: linux
-          dist: bionic
-          compiler: clang
-        - os: linux
-          dist: bionic
-          compiler: gcc
-        - os: linux
-          dist: xenial
-          compiler: clang
-        - os: linux
-          dist: xenial
-          compiler: gcc
         - os: osx
           osx_image: xcode12.2
           compiler: clang
@@ -47,7 +29,13 @@ addons:
             - automake
             - libtool
             - m4
-        update: true
+
+cache:
+    directories:
+        - $HOME/Library/Caches/Homebrew
+
+before_cache:
+    - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew cleanup; fi
 
 before_script:
     - ./bootstrap.sh
